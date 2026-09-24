@@ -544,11 +544,42 @@
         <div class="tile"><div class="k">バック 計</div><div class="v">${yen(tot.nb + tot.lb + tot.cb + tot.mb)}</div></div>
         <div class="tile"><div class="k">人件費率</div><div class="v">${sales ? Math.round((tot.pay / sales) * 1000) / 10 + '<small>%</small>' : '—'}</div><div class="s">売上 ${yen(sales)}</div></div>
       </div>
+      ${staffPerf(names, by, d.orders.filter((o) => storesInView().includes(o.store)))}
       <div class="card"><div class="tbl-wrap"><table class="tbl">
         <thead><tr><th>スタッフ</th><th>出勤</th><th>稼働</th><th>時間給</th><th>通常バック</th><th>開店後バック</th><th>シャンパンバック</th><th>メダルバック</th><th>給料</th></tr></thead>
         <tbody>${rowsHtml}<tr class="total"><td>合計</td><td>延べ${tot.days}日</td><td>${hrs(tot.hours)}</td><td>${yen(tot.wage)}</td><td>${yen(tot.nb)}</td><td>${yen(tot.lb)}</td><td>${yen(tot.cb)}</td><td>${yen(tot.mb)}</td><td>${yen(tot.pay)}</td></tr></tbody>
       </table></div></div>
       <p class="hint" style="margin-top:10px">時間給＝稼働時間×時給（設定タブ）、バックは計上担当に 通常10%・開店後50%・シャンパン20%・メダル¥50。行をタップすると日別の内訳、日別の行をタップすると稼働時間の修正ができます。</p>`;
+  }
+
+  // ---------- スタッフ別の実績（出勤日数・接客数・売上） ----------
+  // 会計にはスタッフ名が入らないため、出勤した日の店舗の会計を「その日の出勤人数」で均等に割って集計する
+  function staffPerf(names, by, orders) {
+    const crew = {}; // store|date -> 出勤人数
+    for (const n of names) for (const r of by[n]) { const k = r.store + '|' + r.date; (crew[k] = crew[k] || new Set()).add(n); }
+    const dayTot = {};
+    for (const o of orders) { const k = o.store + '|' + o.date; const t = (dayTot[k] = dayTot[k] || { g: 0, s: 0, n: 0 }); t.g += nz(o.guests); t.s += nz(o.normal) + nz(o.late) + nz(o.champagne); t.n++; }
+    const rows = names.map((n) => {
+      const days = new Set(by[n].map((r) => r.store + '|' + r.date));
+      let g = 0, sales = 0;
+      for (const k of days) { const t = dayTot[k]; if (!t) continue; const c = crew[k] ? crew[k].size : 1; g += t.g / c; sales += t.s / c; }
+      return { n, days: days.size, g, sales };
+    }).filter((x) => x.days > 0).sort((a, b) => b.sales - a.sales);
+    if (!rows.length) return '';
+    const mx = (k) => Math.max(1, ...rows.map((r) => r[k]));
+    const mD = mx('days'), mG = mx('g'), mS = mx('sales');
+    const bar = (v, m, label, sub) => `<div class="pb"><div class="pb-track"><i style="width:${Math.max(2, (v / m) * 100)}%"></i></div><div class="pb-v">${label}${sub ? `<small>${sub}</small>` : ''}</div></div>`;
+    const r1 = (x) => Math.round(x * 10) / 10;
+    return `<div class="card" style="margin-bottom:14px"><div class="card-h"><h3>スタッフ別の実績</h3><span class="spacer"></span><span class="hint">出勤日の会計を、その日の出勤人数で均等に割って集計（売上の多い順）</span></div>
+      <div class="perf">
+        <div class="perf-row head"><div>スタッフ</div><div>出勤日数</div><div>接客数 <small>1日平均</small></div><div>売上 <small>1日平均</small></div></div>
+        ${rows.map((r) => `<div class="perf-row">
+          <div class="perf-nm">${esc(r.n)}</div>
+          <div data-l="出勤日数">${bar(r.days, mD, r.days + '日')}</div>
+          <div data-l="接客数">${bar(r.g, mG, r1(r.g) + '人', r1(r.g / r.days) + '人/日')}</div>
+          <div data-l="売上">${bar(r.sales, mS, yen(r.sales), yen(r.sales / r.days) + '/日')}</div>
+        </div>`).join('')}
+      </div></div>`;
   }
 
   // ---------- sales dashboard ----------
