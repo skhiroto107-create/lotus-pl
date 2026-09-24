@@ -1,0 +1,7 @@
+{
+  "name": "lotus-pl",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Lotus PL（計上・シフト・給与・売上）",
+  "engines": { "node": ">=18" }
+}

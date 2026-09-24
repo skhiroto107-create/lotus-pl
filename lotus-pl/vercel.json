@@ -1,0 +1,9 @@
+{
+  "functions": {
+    "api/lotus.js": { "maxDuration": 60 },
+    "api/cron.js": { "maxDuration": 60 }
+  },
+  "crons": [
+    { "path": "/api/cron", "schedule": "0 7 * * *" }
+  ]
+}
