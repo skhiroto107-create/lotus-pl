@@ -32,7 +32,7 @@ const actions = {
     } catch (e) { /* 取れなければ設定から */ }
     const s = settings || {};
     if (!staff.length) staff = Object.keys(s.wages || {});
-    return { staff, stores: L.STORES, pinRequired: !!process.env.ADMIN_PIN, kv: L.kvHasStore(), settings: { wages: s.wages || {}, defaultWage: s.defaultWage || 0, startDate: s.startDate || '' } };
+    return { staff, stores: L.STORES, pinRequired: !!process.env.ADMIN_PIN, kv: L.kvHasStore(), settings: { wages: s.wages || {}, defaultWage: s.defaultWage || 0, startDate: s.startDate || '', cogsRate: s.cogsRate == null ? 30 : s.cogsRate, champagneRate: s.champagneRate == null ? 30 : s.champagneRate } };
   },
 
   async data({ month, store, force }) {
@@ -123,7 +123,7 @@ const actions = {
     return { ok: true };
   },
 
-  async settings({ wages, defaultWage, startDate }, { write }) {
+  async settings({ wages, defaultWage, startDate, cogsRate, champagneRate }, { write }) {
     write();
     const [cur] = await L.getJSON(['settings']);
     const s = Object.assign({ wages: {}, defaultWage: 0, startDate: '' }, cur || {});
@@ -135,6 +135,10 @@ const actions = {
     if (defaultWage !== undefined) s.defaultWage = Math.max(0, Math.round(Number(defaultWage) || 0));
     // 集計開始日：この日より前の打刻・会計は売上・給与・日次計上に含めない（空欄なら全期間）
     if (startDate !== undefined) s.startDate = L.isDate(startDate) ? startDate : '';
+    // 原価率（%）：粗利 = 売上 − 原価。通常・開店後の売上とシャンパンで別の率
+    const pct = (v) => Math.min(100, Math.max(0, Math.round(Number(v) * 10) / 10 || 0));
+    if (cogsRate !== undefined) s.cogsRate = pct(cogsRate);
+    if (champagneRate !== undefined) s.champagneRate = pct(champagneRate);
     await L.setJSON([['settings', s]]);
     return { settings: s };
   },
