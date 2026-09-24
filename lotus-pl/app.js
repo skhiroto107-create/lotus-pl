@@ -571,8 +571,7 @@
     const openDays = new Set([...recs.map((r) => r.date + r.store), ...orders.map((o) => o.date + o.store)]).size;
     const salesAll = os.gross - rs.back;
     chartModel = { perDay, stores };
-    const gp = grossProfit(os);
-    const afterLabor = gp.profit - rs.pay;
+    const gp = grossProfit(os, rs);
 
     const tiles = `<div class="tiles">
       <div class="tile hero"><div class="k">月間売上</div><div class="v">${yen(salesAll)}</div><div class="s">通常 ${yen(os.normal)} ・ 開店後 ${yen(os.late)} ・ シャンパン ${yen(os.champagne)} − バック ${yen(rs.back)}</div></div>
@@ -581,13 +580,12 @@
       <div class="tile"><div class="k">客単価</div><div class="v">${os.guests ? yen((os.normal + os.late + os.champagne) / os.guests) : '—'}</div><div class="s">デジタル注文ベース</div></div>
       <div class="tile"><div class="k">人件費率</div><div class="v">${salesAll ? Math.round((rs.pay / salesAll) * 1000) / 10 + '<small>%</small>' : '—'}</div><div class="s">給料 ${yen(rs.pay)}</div></div>
     </div>
-    <div class="card" style="margin-bottom:14px"><div class="card-h"><h3>粗利</h3><span class="spacer"></span><span class="hint">原価率 通常・開店後 ${gp.rate}% ／ シャンパン ${gp.crate}%（設定で変更）</span></div>
+    <div class="card" style="margin-bottom:14px"><div class="card-h"><h3>粗利</h3><span class="spacer"></span><span class="hint">粗利 ＝ 売上 − 人件費（原価は含めていません）</span></div>
       <div class="card-b"><div class="pl">
         <div class="pl-row"><span>売上（通常＋開店後＋シャンパン）</span><b>${yen(os.gross)}</b></div>
-        <div class="pl-row sub"><span>− 原価</span><b>−${yen(gp.cogs)}</b></div>
-        <div class="pl-row total"><span>粗利 <small>粗利率 ${os.gross ? Math.round((gp.profit / os.gross) * 1000) / 10 : 0}%</small></span><b>${yen(gp.profit)}</b></div>
-        <div class="pl-row sub"><span>− 人件費（時間給 ${yen(rs.wage)} ＋ バック ${yen(rs.back)}）</span><b>−${yen(rs.pay)}</b></div>
-        <div class="pl-row total ${afterLabor < 0 ? 'neg' : ''}"><span>人件費差引後の利益</span><b>${yen(afterLabor)}</b></div>
+        <div class="pl-row sub"><span>− バック（通常10%・開店後50%・シャンパン20%・メダル¥50）</span><b>−${yen(rs.back)}</b></div>
+        <div class="pl-row sub"><span>− 時間給</span><b>−${yen(rs.wage)}</b></div>
+        <div class="pl-row total ${gp.profit < 0 ? 'neg' : ''}"><span>粗利 <small>粗利率 ${os.gross ? Math.round((gp.profit / os.gross) * 1000) / 10 : 0}%</small></span><b>${yen(gp.profit)}</b></div>
       </div></div></div>
     ${salesCalendar(stores, recs, orders)}`;
 
@@ -599,17 +597,14 @@
     const breakdown = `<div class="card"><div class="card-h"><h3>店舗別の内訳</h3></div><div class="tbl-wrap"><table class="tbl" style="min-width:640px">
       <thead><tr><th>店舗</th><th>売上</th><th>通常</th><th>開店後</th><th>シャンパン</th><th>割引</th><th>メダル</th><th>客数</th><th>粗利</th><th>給料</th></tr></thead><tbody>
       ${stores.map((st) => { const a = sumRecords(recs.filter((r) => r.store === st)); const o = sumOrders(orders.filter((x) => x.store === st));
-        return `<tr><td><span class="nmcell"><span class="dot" style="background:${STORE_VAR[st]}"></span>${st}</span></td><td class="strong">${yen(o.gross - a.back)}</td><td>${yen(o.normal)}</td><td>${yen(o.late)}</td><td>${yen(o.champagne)}</td><td>${yen(o.discount)}</td><td>${o.medals}枚</td><td>${o.guests}人</td><td>${yen(grossProfit(o).profit)}</td><td>${yen(a.pay)}</td></tr>`; }).join('')}
+        return `<tr><td><span class="nmcell"><span class="dot" style="background:${STORE_VAR[st]}"></span>${st}</span></td><td class="strong">${yen(o.gross - a.back)}</td><td>${yen(o.normal)}</td><td>${yen(o.late)}</td><td>${yen(o.champagne)}</td><td>${yen(o.discount)}</td><td>${o.medals}枚</td><td>${o.guests}人</td><td>${yen(grossProfit(o, a).profit)}</td><td>${yen(a.pay)}</td></tr>`; }).join('')}
       </tbody></table></div></div>`;
     return tiles + chartCard + breakdown;
   }
 
-  // 粗利 = 売上 − 原価（原価 = (通常＋開店後)×原価率 ＋ シャンパン×シャンパン原価率）
-  function grossProfit(os) {
-    const st = state.meta.settings || {};
-    const rate = st.cogsRate == null ? 30 : Number(st.cogsRate), crate = st.champagneRate == null ? 30 : Number(st.champagneRate);
-    const cogs = Math.round((os.normal + os.late) * rate / 100 + os.champagne * crate / 100);
-    return { rate, crate, cogs, profit: os.gross - cogs };
+  // 粗利 = 売上（通常＋開店後＋シャンパン）− 人件費（時間給＋バック）。原価は含めない
+  function grossProfit(os, rs) {
+    return { profit: os.gross - rs.pay };
   }
 
   // 売上カレンダー：日ごとの日次売上（バック控除後）と粗利。タップでその日の日次計上へ
@@ -622,7 +617,7 @@
       const r = recs.filter((x) => x.date === ds), o = orders.filter((x) => x.date === ds);
       const os = sumOrders(o);
       const per = stores.map((st) => [st, netSales(r.filter((x) => x.store === st), o.filter((x) => x.store === st))]);
-      vals.push({ ds, net: os.gross - sumRecords(r).back, gp: grossProfit(os).profit, n: os.n, guests: os.guests, per, has: o.length > 0 || r.length > 0 });
+      vals.push({ ds, net: os.gross - sumRecords(r).back, gp: grossProfit(os, sumRecords(r)).profit, n: os.n, guests: os.guests, per, has: o.length > 0 || r.length > 0 });
     }
     const max = Math.max(1, ...vals.map((v) => v.net));
     let cells = WD.map((w, i) => `<div class="wd ${i === 0 ? 'sun' : i === 6 ? 'sat' : ''}">${w}</div>`).join('');
@@ -638,7 +633,7 @@
     }
     const tail = (first + days) % 7;
     if (tail) for (let i = tail; i < 7; i++) cells += '<div class="cell out"></div>';
-    return `<div class="card" style="margin-bottom:14px"><div class="card-h"><h3>売上カレンダー</h3><span class="spacer"></span><span class="hint">日次売上（バック控除後）・粗利 ／ タップでその日の日次計上へ</span></div>
+    return `<div class="card" style="margin-bottom:14px"><div class="card-h"><h3>売上カレンダー</h3><span class="spacer"></span><span class="hint">日次売上（バック控除後）・粗利（売上−人件費） ／ タップでその日の日次計上へ</span></div>
       <div class="card-b"><div class="cal">${cells}</div></div></div>`;
   }
 
@@ -724,21 +719,10 @@
       <div class="card" style="max-width:640px;margin-top:14px"><div class="card-h"><h3>集計開始日</h3></div><div class="card-b" style="display:flex;flex-direction:column;gap:10px">
         <div class="fld"><label for="s-start">この日から売上・給与・日次計上に反映します（空欄＝全期間）</label><input id="s-start" type="date" value="${(m.settings && m.settings.startDate) || ''}"></div>
         <div><button class="btn primary" data-act="savestart">保存</button></div></div></div>
-      <div class="card" style="max-width:640px;margin-top:14px"><div class="card-h"><h3>原価率（粗利の計算）</h3></div><div class="card-b" style="display:flex;flex-direction:column;gap:10px">
-        <div class="row2"><div class="fld"><label for="s-cogs">通常・開店後の原価率（%）</label><input id="s-cogs" type="number" inputmode="decimal" min="0" max="100" step="0.5" value="${m.settings && m.settings.cogsRate != null ? m.settings.cogsRate : 30}"></div>
-        <div class="fld"><label for="s-champ">シャンパンの原価率（%）</label><input id="s-champ" type="number" inputmode="decimal" min="0" max="100" step="0.5" value="${m.settings && m.settings.champagneRate != null ? m.settings.champagneRate : 30}"></div></div>
-        <p class="hint" style="margin:0">粗利 ＝ 売上 − 原価。原価 ＝（通常＋開店後）× 原価率 ＋ シャンパン × シャンパン原価率</p>
-        <div><button class="btn primary" data-act="savecogs">保存</button></div></div></div>
       <div class="card" style="max-width:640px;margin-top:14px"><div class="card-h"><h3>バック率</h3></div><div class="card-b"><dl class="kv">
         <dt>通常売上</dt><dd>10%</dd><dt>開店時間以降売上</dt><dd>50%</dd><dt>シャンパン</dt><dd>20%</dd><dt>メダル</dt><dd>1枚 ¥50</dd>
       </dl><p class="hint">計上担当のスタッフに付きます。率を変えるときは api/_lib.js の BACK を編集してください。</p></div></div>
       <div class="card" style="max-width:640px;margin-top:14px"><div class="card-h"><h3>データの取り込み</h3></div><div class="card-b"><p class="hint" style="margin:0">打刻はタイムカード、会計はデジタルメニューから自動で取り込みます（画面を開いたとき＋毎日16:00）。タイムカードは当日の打刻しか返さないため、このアプリを使い始めた日より前の打刻は表示されません。</p></div></div>`;
-  }
-  async function saveCogs() {
-    try {
-      const j = await api('settings', { cogsRate: Number($('#s-cogs').value) || 0, champagneRate: Number($('#s-champ').value) || 0 }, true);
-      state.meta.settings = j.settings; toast('原価率を保存しました');
-    } catch (e) { toast(e.message); }
   }
   async function saveStart() {
     try {
@@ -788,7 +772,6 @@
       case 'resetov': resetOverride(b.dataset.id); break;
       case 'savesettings': saveSettings(); break;
       case 'savestart': saveStart(); break;
-      case 'savecogs': saveCogs(); break;
       case 'gotoday': state.day = b.dataset.date; state.userPickedDay = true; state.tab = 'daily'; lsSet(LS.tab, 'daily'); renderTabs(); window.scrollTo({ top: 0 }); load(); break;
       case 'dayplan': openDayPlan(b.dataset.date); break;
       case 'addplan': {
