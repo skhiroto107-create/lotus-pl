@@ -290,3 +290,25 @@ table.tbl{width:100%;border-collapse:collapse;font-size:13px;min-width:720px}
   .perf-row>div[data-l]{display:grid;grid-template-columns:4.5em 1fr;align-items:center;gap:8px}
   .perf-row>div[data-l]::before{content:attr(data-l);font-size:11px;color:var(--ink-3)}
 }
+/* ---------- staff efficiency ---------- */
+.eff{padding:4px 0}
+.eff-row{display:grid;grid-template-columns:40px minmax(70px,.7fr) 1.4fr 2.4fr;gap:6px 14px;align-items:center;padding:12px 16px;border-bottom:1px solid var(--line-2)}
+.eff-row:last-child{border-bottom:0}
+.eff-row.top{background:color-mix(in srgb,var(--bar) 10%,transparent)}
+.eff-rank span{display:grid;place-items:center;width:28px;height:28px;border-radius:50%;background:var(--surface-3);font-weight:800;font-size:13px;color:var(--ink-2);margin:auto}
+.eff-row.top .eff-rank span{background:var(--bar);color:#fff}
+.eff-nm{font-weight:800;font-size:15px}
+.eff-bar{display:flex;align-items:center;gap:10px}
+.eff-bar .pb-track{height:14px}
+.eff-bar .pb-track i.neg{background:var(--bad)}
+.eff-bar b{font-size:15px;font-variant-numeric:tabular-nums;white-space:nowrap;min-width:6.5em;text-align:right}
+.eff-bar b small{font-size:11px;color:var(--ink-3);font-weight:600}
+.negv{color:var(--bad)}
+.eff-stats{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:12.5px;font-variant-numeric:tabular-nums}
+.eff-stats span{white-space:nowrap}
+.eff-stats em{font-style:normal;color:var(--ink-3);font-size:11px;margin-right:4px}
+.eff-stats small{color:var(--ink-3)}
+@media (max-width:900px){
+  .eff-row{grid-template-columns:34px 1fr;}
+  .eff-bar,.eff-stats{grid-column:2}
+}
