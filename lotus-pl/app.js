@@ -319,19 +319,19 @@
       <div class="sh-b">
         <div class="grp-h">打刻</div>
         <div class="row2 dt">
-          <div class="fld"><label for="f-in">出勤</label><input id="f-in" type="datetime-local" value="${toLocalInput(r.in)}"></div>
-          <div class="fld"><label for="f-out">退勤</label><input id="f-out" type="datetime-local" value="${toLocalInput(r.out)}"></div>
+          <div class="fld"><label for="f-in">出勤</label><input id="f-in" type="datetime-local" value="${toLocalInput(r.in)}" data-live="time"></div>
+          <div class="fld"><label for="f-out">退勤</label><input id="f-out" type="datetime-local" value="${toLocalInput(r.out)}" data-live="time"></div>
         </div>
         <div class="row2">
-          <div class="fld"><div class="aux"><label for="f-hours">稼働時間（h）</label><button type="button" class="linkbtn" data-act="calchours">打刻から計算</button></div><input id="f-hours" type="number" inputmode="decimal" step="0.01" value="${r.hours == null ? '' : r.hours}"></div>
+          <div class="fld"><div class="aux"><label for="f-hours">稼働時間（h）</label><button type="button" class="linkbtn" data-act="calchours">打刻から計算</button></div><input id="f-hours" type="number" inputmode="decimal" step="0.25" min="0" value="${r.hours == null ? '' : r.hours}" data-live="hours" data-rate="${r.rate || 0}" data-back="${backOf(r)}"></div>
           <div class="fld"><label for="f-cash">スタート/レジ金</label><input id="f-cash" type="number" inputmode="numeric" step="1" value="${r.cash == null ? '' : r.cash}"></div>
         </div>
         <dl class="kv" style="margin-top:4px">
-          <dt>時間給（${r.rate ? yen(r.rate) + '/h' : '時給未設定'}）</dt><dd>${yen(r.wage)}</dd>
+          <dt>時間給（${r.rate ? yen(r.rate) + '/h' : '時給未設定'}）</dt><dd id="lv-wage">${yen(r.wage)}</dd>
           <dt>通常バック 10% / 開店後バック 50%</dt><dd>${yen(r.normalBack)} / ${yen(r.lateBack)}</dd>
           <dt>シャンパンバック 20% / メダル ¥50</dt><dd>${yen(r.champagneBack)} / ${yen(r.medalBack)}</dd>
           <div class="sep"></div>
-          <dt><b>給料</b></dt><dd>${yen(r.pay)}</dd>
+          <dt><b>給料</b></dt><dd id="lv-pay">${yen(r.pay)}</dd>
         </dl>
         <div class="hint">修正はこのアプリの中だけに保存され、タイムカード側の記録は変わりません。${r.edited ? '<button class="linkbtn" data-act="resetov" data-id="' + r.id + '">修正を取り消してタイムカードの値に戻す</button>' : ''}</div>
       </div>
@@ -365,7 +365,26 @@
     const h = (new Date(fromLocalInput(b)) - new Date(fromLocalInput(a))) / 3600e3;
     if (h < 0) { toast('退勤が出勤より前になっています'); return; }
     $('#f-hours').value = Math.round(h * 100) / 100;
+    livePreview();
   }
+  // 編集中に稼働時間から時間給・給料をその場で再計算して表示
+  function livePreview() {
+    const el = $('#f-hours'); if (!el) return;
+    const h = el.value === '' ? 0 : Number(el.value) || 0;
+    const rate = Number(el.dataset.rate) || 0, back = Number(el.dataset.back) || 0;
+    const w = Math.round(h * rate);
+    if ($('#lv-wage')) $('#lv-wage').textContent = rate ? yen(w) : '—';
+    if ($('#lv-pay')) $('#lv-pay').textContent = yen(w + back);
+  }
+  document.addEventListener('input', (e) => {
+    const k = e.target.dataset && e.target.dataset.live;
+    if (k === 'hours') livePreview();
+    // 出勤・退勤を変えたら稼働時間も自動で計算し直す
+    if (k === 'time') {
+      const a = $('#f-in').value, b = $('#f-out').value;
+      if (a && b) { const h = (new Date(fromLocalInput(b)) - new Date(fromLocalInput(a))) / 3600e3; if (h >= 0) { $('#f-hours').value = Math.round(h * 100) / 100; livePreview(); } }
+    }
+  });
 
   // 計上担当（売上とバックが付くスタッフ）
   function openHolder(st) {
@@ -513,7 +532,7 @@
       const rs = by[n].slice().sort((a, b) => a.date.localeCompare(b.date));
       const s = agg(rs);
       const open = state.openStaff[n] && rs.length;
-      const sub = open ? rs.map((r) => `<tr class="sub"><td>${dayLabel(r.date)}(${WD[weekday(r.date)]}) ${state.store === 'all' ? `<span class="dot" style="background:${STORE_VAR[r.store]}"></span>` : ''} ${r.in ? hm(r.in) : ''}–${r.out ? hm(r.out) : '<span class="badge warn">退勤なし</span>'}</td><td></td><td>${hrs(r.hours)}</td><td>${yen(r.wage)}</td><td>${yen(r.normalBack)}</td><td>${yen(r.lateBack)}</td><td>${yen(r.champagneBack)}</td><td>${yen(r.medalBack)}</td><td class="strong">${yen(r.pay)}</td></tr>`).join('') : '';
+      const sub = open ? rs.map((r) => `<tr class="sub" data-act="edit" data-id="${r.id}" title="タップで打刻・稼働時間を修正"><td>${dayLabel(r.date)}(${WD[weekday(r.date)]}) ${state.store === 'all' ? `<span class="dot" style="background:${STORE_VAR[r.store]}"></span>` : ''} ${r.in ? hm(r.in) : ''}–${r.out ? hm(r.out) : '<span class="badge warn">退勤なし</span>'}</td><td></td><td>${hrs(r.hours)}</td><td>${yen(r.wage)}</td><td>${yen(r.normalBack)}</td><td>${yen(r.lateBack)}</td><td>${yen(r.champagneBack)}</td><td>${yen(r.medalBack)}</td><td class="strong">${yen(r.pay)}</td></tr>`).join('') : '';
       return `<tr class="main${rs.length ? '' : ' none'}" data-act="togglestaff" data-v="${esc(n)}"><td><span class="nmcell">${open ? '▾' : '▸'} ${esc(n)} ${s.open ? `<span class="badge warn">退勤なし ${s.open}</span>` : ''}</span></td><td>${s.days}日</td><td>${hrs(s.hours)}</td><td>${yen(s.wage)}</td><td>${yen(s.nb)}</td><td>${yen(s.lb)}</td><td>${yen(s.cb)}</td><td>${yen(s.mb)}</td><td class="strong">${yen(s.pay)}</td></tr>${sub}`;
     }).join('');
     const sales = netSales(recs, d.orders.filter((o) => storesInView().includes(o.store)));
@@ -527,7 +546,7 @@
         <thead><tr><th>スタッフ</th><th>出勤</th><th>稼働</th><th>時間給</th><th>通常バック</th><th>開店後バック</th><th>シャンパンバック</th><th>メダルバック</th><th>給料</th></tr></thead>
         <tbody>${rowsHtml}<tr class="total"><td>合計</td><td>延べ${tot.days}日</td><td>${hrs(tot.hours)}</td><td>${yen(tot.wage)}</td><td>${yen(tot.nb)}</td><td>${yen(tot.lb)}</td><td>${yen(tot.cb)}</td><td>${yen(tot.mb)}</td><td>${yen(tot.pay)}</td></tr></tbody>
       </table></div></div>
-      <p class="hint" style="margin-top:10px">時間給＝稼働時間×時給（設定タブ）、バックは計上担当に 通常10%・開店後50%・シャンパン20%・メダル¥50。行をタップすると日別の内訳を表示します。</p>`;
+      <p class="hint" style="margin-top:10px">時間給＝稼働時間×時給（設定タブ）、バックは計上担当に 通常10%・開店後50%・シャンパン20%・メダル¥50。行をタップすると日別の内訳、日別の行をタップすると稼働時間の修正ができます。</p>`;
   }
 
   // ---------- sales dashboard ----------
