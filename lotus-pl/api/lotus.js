@@ -32,7 +32,7 @@ const actions = {
     } catch (e) { /* 取れなければ設定から */ }
     const s = settings || {};
     if (!staff.length) staff = Object.keys(s.wages || {});
-    return { staff, stores: L.STORES, pinRequired: !!process.env.ADMIN_PIN, kv: L.kvHasStore(), settings: { wages: s.wages || {}, defaultWage: s.defaultWage || 0 } };
+    return { staff, stores: L.STORES, pinRequired: !!process.env.ADMIN_PIN, kv: L.kvHasStore(), settings: { wages: s.wages || {}, defaultWage: s.defaultWage || 0, startDate: s.startDate || '' } };
   },
 
   async data({ month, store, force }) {
@@ -50,17 +50,19 @@ const actions = {
     const vals = keys.length ? await L.getJSON(keys) : [];
     const [settings, plansAll] = await L.getJSON(['settings', `plans:${month}`]);
     const records = [], orders = [];
+    const startDate = (settings && settings.startDate) || '';
     let i = 0;
     for (const s of stores) for (const d of days) {
       const tc = vals[i++], cfg = vals[i++], ov = vals[i++];
       const mn = menu.byKey[`mn:${s}:${d}`];
       const ords = ((mn && mn.history) || []).map((h) => L.mapOrder(h, s, d));
       const day = L.buildDay(s, d, (tc && tc.records) || [], ords, cfg, ov, settings);
+      if (startDate && d < startDate) continue; // 集計開始日より前は含めない
       records.push(...day.records);
       orders.push(...ords.filter((o) => !o.cancelled));
     }
     const plans = (plansAll || []).filter((p) => stores.includes(p.store));
-    return { records, orders, plans, businessDate: today, errors: [...new Set(errors)], kv: L.kvHasStore() };
+    return { records, orders, plans, businessDate: today, startDate, errors: [...new Set(errors)], kv: L.kvHasStore() };
   },
 
   // 打刻・レジ金の修正（タイムカード側のデータは書き換えず、このアプリ内で上書き）
@@ -121,11 +123,18 @@ const actions = {
     return { ok: true };
   },
 
-  async settings({ wages, defaultWage }, { write }) {
+  async settings({ wages, defaultWage, startDate }, { write }) {
     write();
-    const clean = {};
-    for (const [k, v] of Object.entries(wages || {})) if (v !== '' && v != null && Number(v) >= 0) clean[String(k)] = Math.round(Number(v));
-    const s = { wages: clean, defaultWage: Math.max(0, Math.round(Number(defaultWage) || 0)) };
+    const [cur] = await L.getJSON(['settings']);
+    const s = Object.assign({ wages: {}, defaultWage: 0, startDate: '' }, cur || {});
+    if (wages !== undefined) {
+      const clean = {};
+      for (const [k, v] of Object.entries(wages || {})) if (v !== '' && v != null && Number(v) >= 0) clean[String(k)] = Math.round(Number(v));
+      s.wages = clean;
+    }
+    if (defaultWage !== undefined) s.defaultWage = Math.max(0, Math.round(Number(defaultWage) || 0));
+    // 集計開始日：この日より前の打刻・会計は売上・給与・日次計上に含めない（空欄なら全期間）
+    if (startDate !== undefined) s.startDate = L.isDate(startDate) ? startDate : '';
     await L.setJSON([['settings', s]]);
     return { settings: s };
   },
