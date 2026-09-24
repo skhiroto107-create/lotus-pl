@@ -178,7 +178,11 @@ function buildDay(store, date, tcRecords, orders, dayCfg, overrides, settings) {
     const ov = (overrides && overrides[r.id]) || {};
     const inI = 'in' in ov ? ov.in : r.in;
     const outI = 'out' in ov ? ov.out : r.out;
-    const hours = 'hours' in ov && ov.hours != null ? ov.hours : r.hours != null ? r.hours : diffHours(inI, outI);
+    // 稼働時間: 手入力 > (出勤・退勤を修正した場合は)修正後の打刻から計算 > タイムカードの値 > 打刻から計算
+    const timeEdited = 'in' in ov || 'out' in ov;
+    const hours = 'hours' in ov && ov.hours != null ? ov.hours
+      : timeEdited ? diffHours(inI, outI)
+      : r.hours != null ? r.hours : diffHours(inI, outI);
     return { id: r.id, staff: r.staff, store, date, in: inI, out: outI, hours, cash: 'cash' in ov ? ov.cash : r.startCash, tcNormal: r.tcNormal, edited: Object.keys(ov).length > 0 };
   });
   // 計上担当（売上とバックが付く人）: 手動指定 > タイムカードの日締め代表 > 最初に出勤した人
