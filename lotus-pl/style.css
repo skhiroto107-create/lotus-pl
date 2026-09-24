@@ -178,6 +178,7 @@ table.tbl{width:100%;border-collapse:collapse;font-size:13px;min-width:720px}
 .tbl tr.main{cursor:pointer}
 .tbl tr.main:hover td{background:var(--surface-2)}
 .tbl tr.total td{font-weight:700;border-top:1px solid var(--line);border-bottom:0}
+.tbl tr.none td{color:var(--ink-3)}
 .tbl tr.sub td{font-size:12px;color:var(--ink-2);background:var(--surface-2)}
 .tbl td.strong{font-weight:700}
 .tbl .nmcell{display:flex;align-items:center;gap:7px;font-weight:700}
