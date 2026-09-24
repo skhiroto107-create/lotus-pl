@@ -244,3 +244,30 @@ table.tbl{width:100%;border-collapse:collapse;font-size:13px;min-width:720px}
 @media (hover:none){
   .srow:hover,.cell:hover,.tbl tr.main:hover td{background:inherit}
 }
+
+/* ---------- sales calendar / P&L ---------- */
+.scell{min-height:92px;position:relative;overflow:hidden}
+.scell::before{content:"";position:absolute;inset:0;background:var(--ok);opacity:calc(var(--lv,0) * .22);pointer-events:none}
+.scell>*{position:relative}
+.scell .sv{font-size:15px;font-weight:800;font-variant-numeric:tabular-nums;margin-top:2px}
+.scell .sg{font-size:11px;color:var(--ink-2);font-variant-numeric:tabular-nums}
+.scell .sp{font-size:10px;color:var(--ink-3);display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.scell .sp i{display:inline-block;width:6px;height:6px;border-radius:50%;margin-right:2px}
+.scell .sn{font-size:10px;color:var(--ink-3);margin-top:auto}
+.pl{display:flex;flex-direction:column;max-width:560px}
+.pl-row{display:flex;justify-content:space-between;gap:12px;padding:8px 0;border-bottom:1px solid var(--line-2);font-size:14px}
+.pl-row b{font-variant-numeric:tabular-nums}
+.pl-row.sub{color:var(--ink-2);font-size:13px}
+.pl-row.total{font-size:16px;font-weight:700}
+.pl-row.total small{font-size:11px;color:var(--ink-3);font-weight:600;margin-left:6px}
+.pl-row.total.neg b{color:var(--bad)}
+.pl-row:last-child{border-bottom:0}
+@media (max-width:720px){
+  .scell{min-height:70px}
+  .scell .sv{font-size:11px}
+  .scell .sg,.scell .sp,.scell .sn{display:none}
+}
+.card-h{flex-wrap:wrap;row-gap:4px}
+.card-h h3{white-space:nowrap}
+.pl-row b{white-space:nowrap}
+@media (max-width:720px){.card-h .hint{flex-basis:100%}}
