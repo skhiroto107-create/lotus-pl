@@ -8,6 +8,7 @@
   const STORES = ['藤井寺店', '恵我之荘店'];
   const STORE_VAR = { '藤井寺店': 'var(--s1)', '恵我之荘店': 'var(--s2)' };
   const WD = ['日', '月', '火', '水', '木', '金', '土'];
+  const DEFAULT_START = { '藤井寺店': '22:00', '恵我之荘店': '21:00' }; // シフト予定の開始時刻の初期値
   const BUSINESS_CUTOFF_HOUR = 10; // タイムカードに繋がらないときだけ使う予備の切替時刻(JST)
   let serverBusinessDate = null;   // タイムカードが返す「今日の営業日」
   const LS = { store: 'lotus_sm_store', tab: 'lotus_sm_tab' };
@@ -425,7 +426,7 @@
     const stores = storesInView();
     const plans = d.plans.filter((p) => p.date === ds && stores.includes(p.store));
     const recs = d.records.filter((r) => r.date === ds && stores.includes(r.store));
-    planDraft = planDraft && planDraft.keep ? planDraft : { staff: [], start: '20:00', end: '', store: stores[0], repeat: 1 };
+    planDraft = planDraft && planDraft.keep ? planDraft : { staff: [], start: DEFAULT_START[stores[0]] || '21:00', end: '', store: stores[0], repeat: 1, startEdited: false };
     planDraft.date = ds; planDraft.keep = false;
     const list = plans.length ? `<div class="plist">${plans.map((p) => {
       const done = recs.some((r) => r.staff === p.staff && r.store === p.store);
@@ -451,7 +452,7 @@
       ${state.store === 'all' ? `<div class="fld"><label>店舗</label><div class="chips">${STORES.map((s) => `<button type="button" class="chip-sel ${pd.store === s ? 'on' : ''}" data-act="pstore" data-v="${s}">${s}</button>`).join('')}</div></div>` : ''}
       <div class="fld"><label>スタッフ（複数選択可）</label><div class="chips">${staffList.map((s) => `<button type="button" class="chip-sel ${pd.staff.includes(s) ? 'on' : ''}" data-act="pstaff" data-v="${esc(s)}">${esc(s)}</button>`).join('')}</div></div>
       <div class="row3">
-        <div class="fld"><label for="p-start">開始</label><input id="p-start" type="time" value="${pd.start}"></div>
+        <div class="fld"><label for="p-start">開始</label><input id="p-start" type="time" value="${pd.start}" oninput="this.dataset.edited='1'"></div>
         <div class="fld"><label for="p-end">終了</label><input id="p-end" type="time" value="${pd.end}"></div>
         <div class="fld"><label for="p-rep">繰り返し</label><select id="p-rep">${[1, 2, 3, 4, 5].map((n) => `<option value="${n}" ${pd.repeat === n ? 'selected' : ''}>${n === 1 ? 'この日だけ' : `毎週 ${n}回`}</option>`).join('')}</select></div>
       </div>
@@ -491,14 +492,16 @@
   function viewPay() {
     const d = data();
     const recs = d.records.filter((r) => storesInView().includes(r.store));
-    if (!recs.length) return '<div class="card"><div class="empty"><b>この月の出勤記録はありません</b></div></div>';
     const by = {};
     for (const r of recs) {
       const k = r.staff || '（未選択）';
       (by[k] = by[k] || []).push(r);
     }
-    const order = state.meta.staff.length ? state.meta.staff : Object.keys(by);
-    const names = [...order.filter((n) => by[n]), ...Object.keys(by).filter((n) => !order.includes(n))];
+    // 出勤がなかったスタッフも含めて全員を表示（並びはデジタルメニューのスタッフ順）
+    const order = state.meta.staff || [];
+    const names = [...order, ...Object.keys(by).filter((n) => !order.includes(n))];
+    for (const n of names) by[n] = by[n] || [];
+    if (!names.length) return '<div class="card"><div class="empty"><b>スタッフが登録されていません</b></div></div>';
     const agg = (rs) => {
       const s = { days: new Set(rs.map((r) => r.date + r.store)).size, hours: 0, wage: 0, nb: 0, lb: 0, cb: 0, mb: 0, pay: 0, open: 0 };
       for (const r of rs) { s.hours += nz(r.hours); s.wage += nz(r.wage); s.nb += nz(r.normalBack); s.lb += nz(r.lateBack); s.cb += nz(r.champagneBack); s.mb += nz(r.medalBack); s.pay += nz(r.pay); if (r.in && !r.out) s.open++; }
@@ -509,13 +512,13 @@
     const rowsHtml = names.map((n) => {
       const rs = by[n].slice().sort((a, b) => a.date.localeCompare(b.date));
       const s = agg(rs);
-      const open = state.openStaff[n];
+      const open = state.openStaff[n] && rs.length;
       const sub = open ? rs.map((r) => `<tr class="sub"><td>${dayLabel(r.date)}(${WD[weekday(r.date)]}) ${state.store === 'all' ? `<span class="dot" style="background:${STORE_VAR[r.store]}"></span>` : ''} ${r.in ? hm(r.in) : ''}–${r.out ? hm(r.out) : '<span class="badge warn">退勤なし</span>'}</td><td></td><td>${hrs(r.hours)}</td><td>${yen(r.wage)}</td><td>${yen(r.normalBack)}</td><td>${yen(r.lateBack)}</td><td>${yen(r.champagneBack)}</td><td>${yen(r.medalBack)}</td><td class="strong">${yen(r.pay)}</td></tr>`).join('') : '';
-      return `<tr class="main" data-act="togglestaff" data-v="${esc(n)}"><td><span class="nmcell">${open ? '▾' : '▸'} ${esc(n)} ${s.open ? `<span class="badge warn">退勤なし ${s.open}</span>` : ''}</span></td><td>${s.days}日</td><td>${hrs(s.hours)}</td><td>${yen(s.wage)}</td><td>${yen(s.nb)}</td><td>${yen(s.lb)}</td><td>${yen(s.cb)}</td><td>${yen(s.mb)}</td><td class="strong">${yen(s.pay)}</td></tr>${sub}`;
+      return `<tr class="main${rs.length ? '' : ' none'}" data-act="togglestaff" data-v="${esc(n)}"><td><span class="nmcell">${open ? '▾' : '▸'} ${esc(n)} ${s.open ? `<span class="badge warn">退勤なし ${s.open}</span>` : ''}</span></td><td>${s.days}日</td><td>${hrs(s.hours)}</td><td>${yen(s.wage)}</td><td>${yen(s.nb)}</td><td>${yen(s.lb)}</td><td>${yen(s.cb)}</td><td>${yen(s.mb)}</td><td class="strong">${yen(s.pay)}</td></tr>${sub}`;
     }).join('');
     const sales = netSales(recs, d.orders.filter((o) => storesInView().includes(o.store)));
     return `<div class="tiles">
-        <div class="tile hero"><div class="k">給料合計</div><div class="v">${yen(tot.pay)}</div><div class="s">${names.length} 名 ・ 稼働 ${hrs(tot.hours)}</div></div>
+        <div class="tile hero"><div class="k">給料合計</div><div class="v">${yen(tot.pay)}</div><div class="s">${names.filter((n) => by[n].length).length} 名出勤 ・ 稼働 ${hrs(tot.hours)}</div></div>
         <div class="tile"><div class="k">時間給 計</div><div class="v">${yen(tot.wage)}</div></div>
         <div class="tile"><div class="k">バック 計</div><div class="v">${yen(tot.nb + tot.lb + tot.cb + tot.mb)}</div></div>
         <div class="tile"><div class="k">人件費率</div><div class="v">${sales ? Math.round((tot.pay / sales) * 1000) / 10 + '<small>%</small>' : '—'}</div><div class="s">売上 ${yen(sales)}</div></div>
@@ -698,7 +701,11 @@
         openDayPlan(monthOf(t) === state.month ? t : `${state.month}-01`); break;
       }
       case 'pstaff': { const v = b.dataset.v; const i = planDraft.staff.indexOf(v); i >= 0 ? planDraft.staff.splice(i, 1) : planDraft.staff.push(v); b.classList.toggle('on'); break; }
-      case 'pstore': planDraft.store = b.dataset.v; b.parentElement.querySelectorAll('.chip-sel').forEach((x) => x.classList.toggle('on', x === b)); break;
+      case 'pstore': {
+        planDraft.store = b.dataset.v; b.parentElement.querySelectorAll('.chip-sel').forEach((x) => x.classList.toggle('on', x === b));
+        const st = $('#p-start'); if (st && !st.dataset.edited) st.value = DEFAULT_START[b.dataset.v] || st.value; // 店舗を切り替えたら開始時刻の初期値も切り替え
+        break;
+      }
       case 'saveplan': savePlan(); break;
       case 'delplan': delPlan(b.dataset.id); break;
       case 'togglestaff': state.openStaff[b.dataset.v] = !state.openStaff[b.dataset.v]; render(); break;
