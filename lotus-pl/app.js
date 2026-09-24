@@ -113,7 +113,7 @@
       const j = await api('data', { month: ym, store: state.store, force: !!force });
       const firstLoad = !serverBusinessDate;
       if (j.businessDate) serverBusinessDate = j.businessDate;
-      state.cache[key] = { records: j.records, orders: j.orders, plans: j.plans, errors: j.errors || [], kv: j.kv, at: Date.now() };
+      state.cache[key] = { records: j.records, orders: j.orders, plans: j.plans, errors: j.errors || [], kv: j.kv, startDate: j.startDate || '', at: Date.now() };
       setSync(j.errors && j.errors.length ? 'err' : 'ok');
       // 初回：タイムカードの営業日に合わせて表示日を補正
       if (firstLoad && serverBusinessDate && state.tab === 'daily' && state.day !== serverBusinessDate && !state.userPickedDay) {
@@ -242,6 +242,8 @@
   }
 
   function dailyStore(st, recs, orders, plans) {
+    const sd = data().startDate;
+    if (sd && state.day < sd) return `<div class="card"><div class="empty"><b>集計開始日（${dayLabel(sd)}）より前の日です</b>設定タブの「集計開始日」で変更できます</div></div>`;
     if (!recs.length && !orders.length && !plans.length) {
       const future = state.day > businessToday();
       return `<div class="card"><div class="empty"><b>${future ? 'まだ営業日前です' : 'この日の記録はありません'}</b>${future ? 'シフト画面で予定を組めます' : state.day < (state.firstDay || '') ? 'このアプリで取り込みを始める前の日です' : 'タイムカードで出勤・デジタルメニューで会計するとここに表示されます'}</div></div>`;
@@ -653,6 +655,8 @@
     const msgs = [];
     if (d.kv === false) msgs.push('保存先（Upstash Redis）が未設定です。修正・予定・時給が保存されません。README の手順で Vercel に追加してください。');
     for (const e of d.errors || []) msgs.push(e);
+    if (d.startDate && (state.tab === 'sales' || state.tab === 'pay') && monthOf(d.startDate) === state.month)
+      return (msgs.length ? `<div class="recon ng"><div>${msgs.map(esc).join('<br>')}</div></div>` : '') + `<div class="hint" style="margin:-6px 0 12px">※ ${dayLabel(d.startDate)} 以降を集計しています（設定タブの「集計開始日」で変更）</div>`;
     return msgs.length ? `<div class="recon ng"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 8v5M12 16.5v.5"/><circle cx="12" cy="12" r="9"/></svg><div>${msgs.map(esc).join('<br>')}</div></div>` : '';
   }
 
@@ -668,10 +672,19 @@
         <div class="row3">${staff.map((s) => `<div class="fld"><label>${esc(s)}</label><input type="number" inputmode="numeric" min="0" step="10" data-wage="${esc(s)}" value="${wages[s] == null ? '' : wages[s]}" placeholder="標準"></div>`).join('')}</div>
         <div><button class="btn primary" data-act="savesettings">保存</button></div>
       </div></div>
+      <div class="card" style="max-width:640px;margin-top:14px"><div class="card-h"><h3>集計開始日</h3></div><div class="card-b" style="display:flex;flex-direction:column;gap:10px">
+        <div class="fld"><label for="s-start">この日から売上・給与・日次計上に反映します（空欄＝全期間）</label><input id="s-start" type="date" value="${(m.settings && m.settings.startDate) || ''}"></div>
+        <div><button class="btn primary" data-act="savestart">保存</button></div></div></div>
       <div class="card" style="max-width:640px;margin-top:14px"><div class="card-h"><h3>バック率</h3></div><div class="card-b"><dl class="kv">
         <dt>通常売上</dt><dd>10%</dd><dt>開店時間以降売上</dt><dd>50%</dd><dt>シャンパン</dt><dd>20%</dd><dt>メダル</dt><dd>1枚 ¥50</dd>
       </dl><p class="hint">計上担当のスタッフに付きます。率を変えるときは api/_lib.js の BACK を編集してください。</p></div></div>
       <div class="card" style="max-width:640px;margin-top:14px"><div class="card-h"><h3>データの取り込み</h3></div><div class="card-b"><p class="hint" style="margin:0">打刻はタイムカード、会計はデジタルメニューから自動で取り込みます（画面を開いたとき＋毎日16:00）。タイムカードは当日の打刻しか返さないため、このアプリを使い始めた日より前の打刻は表示されません。</p></div></div>`;
+  }
+  async function saveStart() {
+    try {
+      const j = await api('settings', { startDate: $('#s-start').value || '' }, true);
+      state.meta.settings = j.settings; invalidate(); toast('集計開始日を保存しました');
+    } catch (e) { toast(e.message); }
   }
   async function saveSettings() {
     const wages = {};
@@ -714,6 +727,7 @@
       case 'setholder': setHolder(b.dataset.store, b.dataset.v); break;
       case 'resetov': resetOverride(b.dataset.id); break;
       case 'savesettings': saveSettings(); break;
+      case 'savestart': saveStart(); break;
       case 'dayplan': openDayPlan(b.dataset.date); break;
       case 'addplan': {
         const t = businessToday();
