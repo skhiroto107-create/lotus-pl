@@ -608,6 +608,8 @@
   }
 
   // 売上カレンダー：日ごとの日次売上（バック控除後）と粗利。タップでその日の日次計上へ
+  // カレンダー用：1円単位の正確な金額（スマホでは幅が狭いので ¥ 記号だけ隠す）
+  const yenExact = (n) => `${n < 0 ? '−' : ''}<span class="yc">¥</span>${Math.abs(Math.round(n || 0)).toLocaleString('ja-JP')}`;
   function salesCalendar(stores, recs, orders) {
     const { from, days } = monthRange(state.month);
     const first = weekday(from), today = businessToday();
@@ -626,8 +628,8 @@
       const wd = weekday(v.ds), lv = v.net > 0 ? Math.max(0.12, v.net / max) : 0;
       cells += `<button class="cell scell ${v.ds === today ? 'today' : ''} ${wd === 0 ? 'sun' : wd === 6 ? 'sat' : ''}" data-act="gotoday" data-date="${v.ds}" style="--lv:${lv}">
         <div class="d"><span>${Number(v.ds.slice(8))}</span></div>
-        ${v.has ? `<div class="sv">${yenShort(v.net)}</div><div class="sg">粗利 ${yenShort(v.gp)}</div>
-        ${stores.length > 1 ? `<div class="sp">${v.per.filter(([, x]) => x).map(([st, x]) => `<i style="background:${STORE_VAR[st]}"></i>${yenShort(x)}`).join(' ')}</div>` : ''}
+        ${v.has ? `<div class="sv">${yenExact(v.net)}</div><div class="sg">粗利 ${yenExact(v.gp)}</div>
+        ${stores.length > 1 ? `<div class="sp">${v.per.filter(([, x]) => x).map(([st, x]) => `<span><i style="background:${STORE_VAR[st]}"></i>${yenExact(x)}</span>`).join(' ')}</div>` : ''}
         <div class="sn">${v.n}件 ${v.guests}人</div>` : ''}
       </button>`;
     }
