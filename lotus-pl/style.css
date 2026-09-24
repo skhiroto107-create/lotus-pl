@@ -271,3 +271,4 @@ table.tbl{width:100%;border-collapse:collapse;font-size:13px;min-width:720px}
 .card-h h3{white-space:nowrap}
 .pl-row b{white-space:nowrap}
 @media (max-width:720px){.card-h .hint{flex-basis:100%}}
+@media (max-width:720px){.scell .sv{font-size:10px;letter-spacing:-.03em}.scell .yc{display:none}}
