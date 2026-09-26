@@ -49,7 +49,7 @@ const actions = {
     for (const s of stores) for (const d of days) keys.push(`tc:${s}:${d}`, `day:${s}:${d}`, `ov:${s}:${d}`, `man:${s}:${d}`, `ms:${s}:${d}`);
     const vals = keys.length ? await L.getJSON(keys) : [];
     const [settings, plansAll] = await L.getJSON(['settings', `plans:${month}`]);
-    const records = [], orders = [];
+    const records = [], orders = [], excluded = [];
     const startDate = (settings && settings.startDate) || '';
     let i = 0;
     for (const s of stores) for (const d of days) {
@@ -65,10 +65,11 @@ const actions = {
       const day = L.buildDay(s, d, tcRecs, ords, cfg, ov, settings);
       if (startDate && d < startDate) continue; // 集計開始日より前は含めない
       records.push(...day.records);
-      orders.push(...ords.filter((o) => !o.cancelled));
+      // 打刻（出勤）がない店舗・日の売上は集計しない（入力画面用に excluded で返す）
+      (day.records.length ? orders : excluded).push(...ords.filter((o) => !o.cancelled));
     }
     const plans = (plansAll || []).filter((p) => stores.includes(p.store));
-    return { records, orders, plans, businessDate: today, startDate, errors: [...new Set(errors)], kv: L.kvHasStore() };
+    return { records, orders, excluded, plans, businessDate: today, startDate, errors: [...new Set(errors)], kv: L.kvHasStore() };
   },
 
   // 打刻・レジ金の修正（タイムカード側のデータは書き換えず、このアプリ内で上書き）
