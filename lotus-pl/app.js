@@ -703,7 +703,7 @@
       <div class="tile"><div class="k">客単価</div><div class="v">${os.guests ? yen((os.normal + os.late + os.champagne) / os.guests) : '—'}</div><div class="s">デジタル注文ベース</div></div>
       <div class="tile"><div class="k">人件費率</div><div class="v">${salesAll ? Math.round((rs.pay / salesAll) * 1000) / 10 + '<small>%</small>' : '—'}</div><div class="s">給料 ${yen(rs.pay)}</div></div>
     </div>
-    <div class="card" style="margin-bottom:14px"><div class="card-h"><h3>粗利</h3><span class="spacer"></span><span class="hint">粗利 ＝ 売上 − 人件費（原価は含めていません）</span></div>
+    <div class="card" style="margin-bottom:14px"><div class="card-h"><h3>粗利 <small class="hint" style="font-weight:500">(材料費は非換算)</small></h3><span class="spacer"></span><span class="hint">粗利 ＝ 売上 − 人件費</span></div>
       <div class="card-b"><div class="pl">
         <div class="pl-row"><span>売上（通常＋開店後＋シャンパン）</span><b>${yen(os.gross)}</b></div>
         <div class="pl-row sub"><span>− バック（通常10%・開店後50%・シャンパン20%・メダル¥50）</span><b>−${yen(rs.back)}</b></div>
