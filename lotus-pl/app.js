@@ -444,8 +444,9 @@
   function openDayPlan(ds) {
     const d = data();
     const stores = storesInView();
-    const plans = d.plans.filter((p) => p.date === ds && stores.includes(p.store));
     const recs = d.records.filter((r) => r.date === ds && stores.includes(r.store));
+    // タイムカードで打刻した人の予定は「登録済みの予定」から外す
+    const plans = d.plans.filter((p) => p.date === ds && stores.includes(p.store) && !recs.some((r) => r.staff === p.staff && r.store === p.store));
     planDraft = planDraft && planDraft.keep ? planDraft : { staff: [], start: DEFAULT_START[stores[0]] || '21:00', end: DEFAULT_END[stores[0]] || '', store: stores[0], repeat: 1, startEdited: false };
     planDraft.date = ds; planDraft.keep = false;
     const list = plans.length ? `<div class="plist">${plans.map((p) => {
@@ -458,7 +459,7 @@
       <div class="sh-h"><div><h2>${dayLabel(ds)}(${WD[weekday(ds)]}) のシフト</h2><div class="sub">${ds <= businessToday() ? '藤井寺店・恵我之荘店' : state.store === 'all' ? '全店' : esc(state.store)}</div></div>
         <button class="icon-btn x" data-act="close" aria-label="閉じる"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
       <div class="sh-b">
-        <div class="grp-h">登録済みの予定</div>${list}
+        ${plans.length || ds >= businessToday() ? `<div class="grp-h">登録済みの予定</div>${list}` : ''}
         ${ds < businessToday() ? '' : `<div class="grp-h" style="margin-top:10px">予定を追加</div>${planForm()}`}
         ${ds <= businessToday() ? `<div id="actual">${actualSection(ds)}</div>` : ''}
       </div>
