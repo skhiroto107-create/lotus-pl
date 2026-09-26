@@ -408,8 +408,17 @@
   }
 
   // ---------- shift calendar ----------
+  // その日にどちらかの店舗でタイムカードの打刻があるか（予定を上書きするため）
+  function punchedAny(ds, staff) {
+    const src = [...data().records, ...((allData() && allData().records) || [])];
+    return src.some((r) => r.date === ds && r.staff === staff);
+  }
   function viewShift() {
     const d = data();
+    if (state.store !== 'all' && !allData() && state.allLoading !== currentYm()) { // 1店舗表示でも、もう一方の店舗の打刻で予定を上書きできるように
+      state.allLoading = currentYm();
+      ensureAll().then(() => { if (state.tab === 'shift') render(); }).catch(() => {});
+    }
     const { from, days } = monthRange(state.month);
     const first = weekday(from);
     const today = businessToday();
@@ -426,7 +435,7 @@
         const sd = state.store === 'all' ? `<span class="sd" style="background:${STORE_VAR[st]}"></span>` : '';
         // タイムカードの打刻がある人は、予定をその打刻で上書きして表示
         for (const p of plans) {
-          if (recs.some((r) => r.staff === p.staff)) continue;
+          if (punchedAny(ds, p.staff)) continue; // 別の店舗で打刻した場合も予定は上書き
           chips.push(`<span class="chip">${sd}${esc(p.staff)}<span class="t">${esc(p.start || '')}</span></span>`);
         }
         for (const r of recs) chips.push(`<span class="chip">${sd}${esc(r.staff || '?')}<span class="t">${r.in ? hm(r.in) : ''}</span></span>`);
@@ -446,7 +455,7 @@
     const stores = storesInView();
     const recs = d.records.filter((r) => r.date === ds && stores.includes(r.store));
     // タイムカードで打刻した人の予定は「登録済みの予定」から外す
-    const plans = d.plans.filter((p) => p.date === ds && stores.includes(p.store) && !recs.some((r) => r.staff === p.staff && r.store === p.store));
+    const plans = d.plans.filter((p) => p.date === ds && stores.includes(p.store) && !punchedAny(ds, p.staff));
     planDraft = planDraft && planDraft.keep ? planDraft : { staff: [], start: DEFAULT_START[stores[0]] || '21:00', end: DEFAULT_END[stores[0]] || '', store: stores[0], repeat: 1, startEdited: false };
     planDraft.date = ds; planDraft.keep = false;
     const list = plans.length ? `<div class="plist">${plans.map((p) => {
