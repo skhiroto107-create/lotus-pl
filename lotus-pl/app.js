@@ -489,7 +489,8 @@
       const menu = allO.filter((o) => o.store === st && o.date === ds && !o.manual);
       const menuSum = sumOrders(menu);
       const ms = allO.find((o) => o.store === st && o.date === ds && o.manual) || {};
-      const v = (k) => (ms[k] ? ms[k] : 0); // 空欄は0
+      // 手入力がなければデジタルメニューの合計を初期値に（保存するとこの値で置き換え）
+      const v = (k) => (ms.id ? nz(ms[k]) : nz(menuSum[k]));
       return `<div class="act-store">
         <div class="act-h"><span class="dot" style="background:${STORE_VAR[st]}"></span><b>${st}</b></div>
         <div class="fld"><label>出勤</label>
@@ -505,16 +506,16 @@
         <div><button class="btn sm" data-act="addman" data-store="${st}" data-i="${i}" data-date="${ds}">＋ 出勤を追加</button></div>
         ${!mine.length && (menu.length || ms.id) ? '<div class="hint" style="color:var(--warn)">出勤がないため、この店舗の売上は集計されていません。出勤を追加すると反映されます</div>' : ''}
         <div class="fld" style="margin-top:4px"><label>計上（手入力）</label>
-          ${menu.length ? `<div class="hint">デジタルメニューの会計 ${menu.length}件（通常 ${yen(menuSum.normal)}・開店後 ${yen(menuSum.late)}・シャンパン ${yen(menuSum.champagne)}）に上乗せされます</div>` : ''}</div>
+          ${menu.length ? `<div class="hint">デジタルメニューの会計 ${menu.length}件（通常 ${yen(menuSum.normal)}・開店後 ${yen(menuSum.late)}・シャンパン ${yen(menuSum.champagne)}）${ms.id ? '<b>の代わりに、下の金額で計上中</b>' : 'の合計を表示中。直して保存すると、この金額で置き換えます'}</div>` : ''}</div>
         <div class="row3">
-          ${[['normal', '通常売上'], ['late', '開店後売上'], ['champagne', 'シャンパン'], ['guests', '客数'], ['medals', 'メダル枚数'], ['discount', 'スタッフ割引']].map(([k, l]) => `<div class="fld"><label for="m-${k}-${i}">${l}</label><input id="m-${k}-${i}" type="number" inputmode="numeric" min="0" value="${v(k)}"></div>`).join('')}
+          ${[['normal', '通常売上'], ['late', '開店後売上'], ['champagne', 'シャンパン'], ['guests', '客数'], ['medals', 'メダル枚数'], ['discount', 'スタッフ割引']].map(([k, l]) => `<div class="fld"><label for="m-${k}-${i}">${l}</label><input id="m-${k}-${i}" type="number" inputmode="numeric" min="0" value="${v(k)}" data-orig="${v(k)}" data-has="${ms.id ? 1 : 0}"></div>`).join('')}
         </div>
       </div>`;
     };
     return `<div class="grp-h" style="margin-top:10px">実績（後から入力）</div>
       ${sd && ds < sd ? `<div class="recon ng" style="margin:0"><div>この日は集計開始日（${dayLabel(sd)}）より前のため、入力しても売上・給与には出ません。設定タブで集計開始日を変更してください。</div></div>` : ''}
       <div class="act-grid">${STORES.map(block).join('')}</div>
-      <div><button class="btn primary" data-act="savems" data-date="${ds}">2店舗の計上を保存</button> <span class="hint">空欄は0として保存（すべて0ならその店舗の手入力分を削除）</span></div>`;
+      <div><button class="btn primary" data-act="savems" data-date="${ds}">2店舗の計上を保存</button> <span class="hint">空欄は0として保存。変更していない店舗は保存しません（すべて0で保存するとデジタルメニューの会計に戻ります）</span></div>`;
   }
   const hmToIso = (ds, t) => (t ? `${ds}T${t}:00+09:00` : null);
   async function afterActual(ds, msg) {
@@ -540,7 +541,10 @@
   async function saveManualSales(ds) {
     try {
       for (let i = 0; i < STORES.length; i++) {
-        const sales = {}; for (const k of ['normal', 'late', 'champagne', 'guests', 'medals', 'discount']) sales[k] = Number($(`#m-${k}-${i}`).value) || 0;
+        const ks = ['normal', 'late', 'champagne', 'guests', 'medals', 'discount'];
+        const sales = {}; let changed = false;
+        for (const k of ks) { const el = $(`#m-${k}-${i}`); sales[k] = Number(el.value) || 0; if (sales[k] !== Number(el.dataset.orig)) changed = true; }
+        if (!changed) continue; // 触っていない店舗はそのまま
         await api('manualSales', { store: STORES[i], date: ds, sales }, true);
       }
       await afterActual(ds, '2店舗の計上を保存しました');
