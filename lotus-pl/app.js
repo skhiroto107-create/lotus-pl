@@ -436,7 +436,7 @@
         // タイムカードの打刻がある人は、予定をその打刻で上書きして表示
         for (const p of plans) {
           if (punchedAny(ds, p.staff)) continue; // 別の店舗で打刻した場合も予定は上書き
-          chips.push(`<span class="chip">${sd}${esc(p.staff)}<span class="t">${esc(p.start || '')}</span></span>`);
+          chips.push(`<span class="chip plan" title="登録済みのシフト">${sd}${esc(p.staff)}<span class="t">${esc(p.start || '')}</span></span>`);
         }
         for (const r of recs) chips.push(`<span class="chip">${sd}${esc(r.staff || '?')}<span class="t">${r.in ? hm(r.in) : ''}</span></span>`);
       }
@@ -446,7 +446,7 @@
     if (tail) for (let i = tail; i < 7; i++) cells += '<div class="cell out"></div>';
     const warn = '';
     return warn + `<div class="cal">${cells}</div>
-      <div class="legend"><span>タイムカードの打刻がある日は、予定を打刻の時間で上書きして表示 ／ 日付をタップして予定・実績を編集</span></div>`;
+      <div class="legend"><span class="chip plan">登録済みのシフト</span><span class="chip">出勤（タイムカード）</span><span>打刻があればシフトを打刻の時間で上書き ／ 日付をタップして編集</span></div>`;
   }
 
   let planDraft = null;
@@ -454,21 +454,21 @@
     const d = data();
     const stores = storesInView();
     const recs = d.records.filter((r) => r.date === ds && stores.includes(r.store));
-    // タイムカードで打刻した人の予定は「登録済みの予定」から外す
+    // タイムカードで打刻した人のシフトは「登録済みのシフト」から外す
     const plans = d.plans.filter((p) => p.date === ds && stores.includes(p.store) && !punchedAny(ds, p.staff));
     planDraft = planDraft && planDraft.keep ? planDraft : { staff: [], start: DEFAULT_START[stores[0]] || '21:00', end: DEFAULT_END[stores[0]] || '', store: stores[0], repeat: 1, startEdited: false };
     planDraft.date = ds; planDraft.keep = false;
     const list = plans.length ? `<div class="plist">${plans.map((p) => {
       const r = recs.find((x) => x.staff === p.staff && x.store === p.store); // 打刻があれば打刻の時間で上書き
       const tm = r ? `${r.in ? hm(r.in) : ''}${r.out ? '–' + hm(r.out) : ''}` : `${esc(p.start || '')}${p.end ? '–' + esc(p.end) : ''}`;
-      return `<div class="pi">${state.store === 'all' ? `<span class="dot" style="background:${STORE_VAR[p.store]}"></span>` : ''}<b>${esc(p.staff)}</b><span class="t">${tm}</span>${p.memo ? `<span class="hint">${esc(p.memo)}</span>` : ''}
+      return `<div class="pi plan">${state.store === 'all' ? `<span class="dot" style="background:${STORE_VAR[p.store]}"></span>` : ''}<b>${esc(p.staff)}</b><span class="t">${tm}</span>${p.memo ? `<span class="hint">${esc(p.memo)}</span>` : ''}
         <button class="del" data-act="delplan" data-id="${p.id}" aria-label="${esc(p.staff)}の予定を削除"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M5 7h14M10 7V5h4v2M7 7l1 12h8l1-12"/></svg></button></div>`;
-    }).join('')}</div>` : '<div class="hint">この日の予定はまだありません</div>';
+    }).join('')}</div>` : '<div class="hint">この日のシフトはまだありません</div>';
     openSheet(`
       <div class="sh-h"><div><h2>${dayLabel(ds)}(${WD[weekday(ds)]}) のシフト</h2><div class="sub">${ds <= businessToday() ? '藤井寺店・恵我之荘店' : state.store === 'all' ? '全店' : esc(state.store)}</div></div>
         <button class="icon-btn x" data-act="close" aria-label="閉じる"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
       <div class="sh-b">
-        ${plans.length || ds >= businessToday() ? `<div class="grp-h">登録済みの予定</div>${list}` : ''}
+        ${plans.length || ds >= businessToday() ? `<div class="grp-h">登録済みのシフト</div>${list}` : ''}
         ${ds < businessToday() ? '' : `<div class="grp-h" style="margin-top:10px">予定を追加</div>${planForm()}`}
         ${ds <= businessToday() ? `<div id="actual">${actualSection(ds)}</div>` : ''}
       </div>
