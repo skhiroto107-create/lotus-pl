@@ -273,7 +273,7 @@
       if (!r.in) tm = '<span class="badge warn">出勤未打刻</span>';
       else tm = `<span class="times">${hm(r.in)} – ${r.out ? hm(r.out) : ''}</span>${r.out ? '' : ' <span class="badge warn">退勤未打刻</span>'}`;
       return `<button class="srow" data-act="edit" data-id="${r.id}">
-        <div class="c-nm nm"><span>${esc(r.staff || '（未選択）')}</span>${r.holder ? '<span class="badge ok">計上担当</span>' : ''}${r.edited ? '<span class="badge mute">修正済</span>' : ''}${planned ? '' : '<span class="badge mute">予定外</span>'}</div>
+        <div class="c-nm nm"><span>${esc(r.staff || '（未選択）')}</span>${r.holder ? '<span class="badge ok">計上担当</span>' : ''}${r.manual ? '<span class="badge mute">手入力</span>' : ''}${r.edited ? '<span class="badge mute">修正済</span>' : ''}${planned ? '' : '<span class="badge mute">予定外</span>'}</div>
         <div class="c-tm">${tm}</div>
         <div class="c-h r">${hrs(r.hours)}</div>
         <div class="c-wage r">${r.rate ? yen(r.wage) : '<span class="badge warn">時給未設定</span>'}</div>
@@ -461,11 +461,76 @@
       <div class="sh-b">
         <div class="grp-h">登録済みの予定</div>${list}
         ${extra.length ? `<div class="hint">予定外の出勤：${extra.map((r) => esc(r.staff) + (r.in ? ' ' + hm(r.in) : '')).join('、')}</div>` : ''}
-        <div class="grp-h">予定を追加</div>
+        ${ds < businessToday() ? actualForm(ds, recs) : ''}
+        <div class="grp-h" style="margin-top:10px">予定を追加</div>
         ${planForm()}
+        ${ds === businessToday() ? actualForm(ds, recs) : ''}
       </div>
-      <div class="sh-f"><button class="btn" data-act="close">閉じる</button><button class="btn primary" data-act="saveplan">追加する</button></div>`);
+      <div class="sh-f"><button class="btn" data-act="close">閉じる</button><button class="btn primary" data-act="saveplan">予定を追加する</button></div>`);
   }
+  // ---------- 実績を後から入力（出勤・計上） ----------
+  let actStore = null;
+  function actualForm(ds, recs) {
+    const stores = storesInView();
+    if (!actStore || !stores.includes(actStore)) actStore = stores[0];
+    const st = actStore;
+    const d = data();
+    const sd = d.startDate;
+    const staffList = state.meta.staff.length ? state.meta.staff : [];
+    const mine = recs.filter((r) => r.store === st);
+    const menu = d.orders.filter((o) => o.store === st && o.date === ds && !o.manual);
+    const menuSum = sumOrders(menu);
+    const ms = d.orders.find((o) => o.store === st && o.date === ds && o.manual) || {};
+    const v = (k) => (ms[k] ? ms[k] : '');
+    const del = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M5 7h14M10 7V5h4v2M7 7l1 12h8l1-12"/></svg>';
+    return `
+      <div class="grp-h" style="margin-top:10px">実績（後から入力）${stores.length > 1 ? '' : ' ・ ' + esc(st)}</div>
+      ${sd && ds < sd ? `<div class="recon ng" style="margin:0"><div>この日は集計開始日（${dayLabel(sd)}）より前のため、入力しても売上・給与には出ません。設定タブで集計開始日を変更してください。</div></div>` : ''}
+      ${stores.length > 1 ? `<div class="fld"><label>店舗</label><div class="chips">${STORES.map((x) => `<button type="button" class="chip-sel ${x === st ? 'on' : ''}" data-act="actstore" data-v="${x}" data-date="${ds}">${x}</button>`).join('')}</div></div>` : ''}
+      <div class="fld"><label>出勤したスタッフ</label>
+        ${mine.length ? `<div class="plist">${mine.map((r) => `<div class="pi"><b>${esc(r.staff)}</b><span class="t">${r.in ? hm(r.in) : '—'}–${r.out ? hm(r.out) : ''}</span>${r.manual ? '<span class="badge mute">手入力</span>' : '<span class="badge ok">打刻</span>'}
+          <button class="linkbtn" data-act="edit" data-id="${r.id}" style="margin-left:auto">修正</button>
+          ${r.manual ? `<button class="del" data-act="delman" data-id="${r.id}" data-store="${esc(st)}" data-date="${ds}" aria-label="削除">${del}</button>` : ''}</div>`).join('')}</div>` : '<div class="hint">この日の出勤はありません</div>'}
+      </div>
+      <div class="row3">
+        <div class="fld"><label for="a-staff">スタッフ</label><select id="a-staff">${staffList.map((x) => `<option>${esc(x)}</option>`).join('')}</select></div>
+        <div class="fld"><label for="a-in">出勤</label><input id="a-in" type="time" value="${DEFAULT_START[st] || '21:00'}"></div>
+        <div class="fld"><label for="a-out">退勤</label><input id="a-out" type="time" value=""></div>
+      </div>
+      <div><button class="btn" data-act="addman" data-date="${ds}">＋ 出勤を追加</button></div>
+      <div class="fld" style="margin-top:6px"><label>計上（手入力）</label>
+        <div class="hint">${menu.length ? `デジタルメニューの会計 ${menu.length}件（通常 ${yen(menuSum.normal)}・開店後 ${yen(menuSum.late)}・シャンパン ${yen(menuSum.champagne)}）とは別に加算されます` : 'デジタルメニューの会計がない日は、ここに入力した金額がその日の計上になります'}</div></div>
+      <div class="row3">
+        <div class="fld"><label for="m-normal">通常売上</label><input id="m-normal" type="number" inputmode="numeric" min="0" value="${v('normal')}"></div>
+        <div class="fld"><label for="m-late">開店後売上</label><input id="m-late" type="number" inputmode="numeric" min="0" value="${v('late')}"></div>
+        <div class="fld"><label for="m-champagne">シャンパン</label><input id="m-champagne" type="number" inputmode="numeric" min="0" value="${v('champagne')}"></div>
+        <div class="fld"><label for="m-guests">客数</label><input id="m-guests" type="number" inputmode="numeric" min="0" value="${v('guests')}"></div>
+        <div class="fld"><label for="m-medals">メダル枚数</label><input id="m-medals" type="number" inputmode="numeric" min="0" value="${v('medals')}"></div>
+        <div class="fld"><label for="m-discount">スタッフ割引</label><input id="m-discount" type="number" inputmode="numeric" min="0" value="${v('discount')}"></div>
+      </div>
+      <div><button class="btn" data-act="savems" data-date="${ds}">計上を保存</button> <span class="hint">空欄で保存すると手入力分を削除</span></div>`;
+  }
+  const hmToIso = (ds, t) => (t ? `${ds}T${t}:00+09:00` : null);
+  async function addManual(ds) {
+    const staff = $('#a-staff').value, tin = $('#a-in').value, tout = $('#a-out').value;
+    if (!staff || !tin) { toast('スタッフと出勤時刻を入れてください'); return; }
+    const inIso = hmToIso(ds, tin);
+    let outIso = hmToIso(ds, tout);
+    if (outIso && tout <= tin) outIso = hmToIso(addDays(ds, 1), tout); // 日付をまたぐ退勤
+    try { await api('manualAdd', { store: actStore, date: ds, staff, in: inIso, out: outIso }, true); toast(`${staff} の出勤を追加しました`); await load(true); planDraft.keep = true; openDayPlan(ds); }
+    catch (e) { toast(e.message); }
+  }
+  async function delManual(id, st, ds) {
+    if (!confirm('手入力した出勤を削除しますか？')) return;
+    try { await api('manualDelete', { store: st, date: ds, id }, true); toast('削除しました'); await load(true); planDraft.keep = true; openDayPlan(ds); }
+    catch (e) { toast(e.message); }
+  }
+  async function saveManualSales(ds) {
+    const sales = {}; for (const k of ['normal', 'late', 'champagne', 'guests', 'medals', 'discount']) sales[k] = Number($('#m-' + k).value) || 0;
+    try { const j = await api('manualSales', { store: actStore, date: ds, sales }, true); toast(j.sales ? '計上を保存しました' : '手入力の計上を削除しました'); await load(true); planDraft.keep = true; openDayPlan(ds); }
+    catch (e) { toast(e.message); }
+  }
+
   function planForm() {
     const pd = planDraft;
     const staffList = state.meta.staff.length ? state.meta.staff : [];
@@ -812,6 +877,10 @@
       case 'resetov': resetOverride(b.dataset.id); break;
       case 'savesettings': saveSettings(); break;
       case 'savestart': saveStart(); break;
+      case 'actstore': actStore = b.dataset.v; planDraft.keep = true; openDayPlan(b.dataset.date); break;
+      case 'addman': addManual(b.dataset.date); break;
+      case 'delman': delManual(b.dataset.id, b.dataset.store, b.dataset.date); break;
+      case 'savems': saveManualSales(b.dataset.date); break;
       case 'gotoday': state.day = b.dataset.date; state.userPickedDay = true; state.tab = 'daily'; lsSet(LS.tab, 'daily'); renderTabs(); window.scrollTo({ top: 0 }); load(); break;
       case 'dayplan': openDayPlan(b.dataset.date); break;
       case 'addplan': {
