@@ -656,8 +656,8 @@
       const ds = `${state.month}-${pad(i)}`;
       const r = recs.filter((x) => x.date === ds), o = orders.filter((x) => x.date === ds);
       const os = sumOrders(o);
-      const per = stores.map((st) => [st, netSales(r.filter((x) => x.store === st), o.filter((x) => x.store === st))]);
-      vals.push({ ds, net: os.gross - sumRecords(r).back, gp: grossProfit(os, sumRecords(r)).profit, n: os.n, guests: os.guests, per, has: o.length > 0 || r.length > 0 });
+      const per = stores.map((st) => [st, o.filter((x) => x.store === st).reduce((a, x) => a + nz(x.normal), 0)]);
+      vals.push({ ds, net: os.normal, gp: grossProfit(os, sumRecords(r)).profit, n: os.n, guests: os.guests, per, has: o.length > 0 || r.length > 0 });
     }
     const max = Math.max(1, ...vals.map((v) => v.net));
     let cells = WD.map((w, i) => `<div class="wd ${i === 0 ? 'sun' : i === 6 ? 'sat' : ''}">${w}</div>`).join('');
@@ -666,14 +666,14 @@
       const wd = weekday(v.ds), lv = v.net > 0 ? Math.max(0.12, v.net / max) : 0;
       cells += `<button class="cell scell ${v.ds === today ? 'today' : ''} ${wd === 0 ? 'sun' : wd === 6 ? 'sat' : ''}" data-act="gotoday" data-date="${v.ds}" style="--lv:${lv}">
         <div class="d"><span>${Number(v.ds.slice(8))}</span></div>
-        ${v.has ? `<div class="sv">${yenExact(v.net)}</div><div class="sg">粗利 ${yenExact(v.gp)}</div>
+        ${v.has ? `<div class="sv" title="通常売上">${yenExact(v.net)}</div><div class="sg">粗利 ${yenExact(v.gp)}</div>
         ${stores.length > 1 ? `<div class="sp">${v.per.filter(([, x]) => x).map(([st, x]) => `<span><i style="background:${STORE_VAR[st]}"></i>${yenExact(x)}</span>`).join(' ')}</div>` : ''}
         <div class="sn">${v.n}件 ${v.guests}人</div>` : ''}
       </button>`;
     }
     const tail = (first + days) % 7;
     if (tail) for (let i = tail; i < 7; i++) cells += '<div class="cell out"></div>';
-    return `<div class="card" style="margin-bottom:14px"><div class="card-h"><h3>売上カレンダー</h3><span class="spacer"></span><span class="hint">日次売上（バック控除後）・粗利（売上−人件費） ／ タップでその日の日次計上へ</span></div>
+    return `<div class="card" style="margin-bottom:14px"><div class="card-h"><h3>売上カレンダー</h3><span class="spacer"></span><span class="hint">通常売上・粗利（売上−人件費） ／ タップでその日の日次計上へ</span></div>
       <div class="card-b"><div class="cal">${cells}</div></div></div>`;
   }
 
