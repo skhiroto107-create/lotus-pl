@@ -687,17 +687,17 @@
     for (let i = 1; i <= days; i++) {
       const ds = `${state.month}-${pad(i)}`;
       const row = { date: ds };
-      for (const st of stores) row[st] = netSales(recs.filter((r) => r.date === ds && r.store === st), orders.filter((o) => o.date === ds && o.store === st));
+      for (const st of stores) row[st] = sumOrders(orders.filter((o) => o.date === ds && o.store === st)).gross; // 粗利の「売上」と同じ（バック控除前）
       row.guests = orders.filter((o) => o.date === ds).reduce((a, o) => a + nz(o.guests), 0);
       perDay.push(row);
     }
     const openDays = new Set([...recs.map((r) => r.date + r.store), ...orders.map((o) => o.date + o.store)]).size;
-    const salesAll = os.gross - rs.back;
+    const salesAll = os.gross; // 粗利の「売上」と同じ（通常＋開店後＋シャンパン）
     chartModel = { perDay, stores };
     const gp = grossProfit(os, rs);
 
     const tiles = `<div class="tiles">
-      <div class="tile hero"><div class="k">月間売上</div><div class="v">${yen(salesAll)}</div><div class="s">通常 ${yen(os.normal)} ・ 開店後 ${yen(os.late)} ・ シャンパン ${yen(os.champagne)} − バック ${yen(rs.back)}</div></div>
+      <div class="tile hero"><div class="k">月間売上</div><div class="v">${yen(salesAll)}</div><div class="s">通常 ${yen(os.normal)} ・ 開店後 ${yen(os.late)} ・ シャンパン ${yen(os.champagne)}</div></div>
       <div class="tile"><div class="k">営業日数</div><div class="v">${openDays}<small>日</small></div><div class="s">平均日商 ${openDays ? yen(salesAll / openDays) : '—'}</div></div>
       <div class="tile"><div class="k">来店客数</div><div class="v">${os.guests}<small>人</small></div><div class="s">新規 ${os.newc} ・ リピート ${os.rep}</div></div>
       <div class="tile"><div class="k">客単価</div><div class="v">${os.guests ? yen((os.normal + os.late + os.champagne) / os.guests) : '—'}</div><div class="s">デジタル注文ベース</div></div>
@@ -720,7 +720,7 @@
     const breakdown = `<div class="card"><div class="card-h"><h3>店舗別の内訳</h3></div><div class="tbl-wrap"><table class="tbl" style="min-width:640px">
       <thead><tr><th>店舗</th><th>売上</th><th>通常</th><th>開店後</th><th>シャンパン</th><th>割引</th><th>メダル</th><th>客数</th><th>粗利</th><th>給料</th></tr></thead><tbody>
       ${stores.map((st) => { const a = sumRecords(recs.filter((r) => r.store === st)); const o = sumOrders(orders.filter((x) => x.store === st));
-        return `<tr><td><span class="nmcell"><span class="dot" style="background:${STORE_VAR[st]}"></span>${st}</span></td><td class="strong">${yen(o.gross - a.back)}</td><td>${yen(o.normal)}</td><td>${yen(o.late)}</td><td>${yen(o.champagne)}</td><td>${yen(o.discount)}</td><td>${o.medals}枚</td><td>${o.guests}人</td><td>${yen(grossProfit(o, a).profit)}</td><td>${yen(a.pay)}</td></tr>`; }).join('')}
+        return `<tr><td><span class="nmcell"><span class="dot" style="background:${STORE_VAR[st]}"></span>${st}</span></td><td class="strong">${yen(o.gross)}</td><td>${yen(o.normal)}</td><td>${yen(o.late)}</td><td>${yen(o.champagne)}</td><td>${yen(o.discount)}</td><td>${o.medals}枚</td><td>${o.guests}人</td><td>${yen(grossProfit(o, a).profit)}</td><td>${yen(a.pay)}</td></tr>`; }).join('')}
       </tbody></table></div></div>`;
     return tiles + chartCard + breakdown;
   }
