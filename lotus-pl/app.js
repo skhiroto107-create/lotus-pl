@@ -10,6 +10,7 @@
   const WD = ['日', '月', '火', '水', '木', '金', '土'];
   const DEFAULT_START = { '藤井寺店': '22:00', '恵我之荘店': '21:00' }; // シフト予定の開始時刻の初期値
   const DEFAULT_END = { '藤井寺店': '03:00', '恵我之荘店': '02:00' }; // 退勤時刻の初期値
+  const DEFAULT_STAFF = 'ひろと'; // 出勤を追加するときのスタッフの初期値
   const BUSINESS_CUTOFF_HOUR = 10; // タイムカードに繋がらないときだけ使う予備の切替時刻(JST)
   let serverBusinessDate = null;   // タイムカードが返す「今日の営業日」
   const LS = { store: 'lotus_sm_store', tab: 'lotus_sm_tab' };
@@ -497,7 +498,7 @@
             ${r.manual ? `<button class="del" data-act="delman" data-id="${r.id}" data-store="${st}" data-date="${ds}" aria-label="削除">${del}</button>` : ''}</div>`).join('')}</div>` : '<div class="hint">出勤なし</div>'}
         </div>
         <div class="row3 act-att">
-          <div class="fld"><label for="a-staff-${i}">スタッフ</label><select id="a-staff-${i}">${staffList.map((x) => `<option>${esc(x)}</option>`).join('')}</select></div>
+          <div class="fld"><label for="a-staff-${i}">スタッフ</label><select id="a-staff-${i}">${staffList.map((x) => `<option ${x === DEFAULT_STAFF ? 'selected' : ''}>${esc(x)}</option>`).join('')}</select></div>
           <div class="fld"><label for="a-in-${i}">出勤</label><input id="a-in-${i}" type="time" value="${DEFAULT_START[st] || '21:00'}"></div>
           <div class="fld"><label for="a-out-${i}">退勤</label><input id="a-out-${i}" type="time" value="${DEFAULT_END[st] || ''}"></div>
         </div>
