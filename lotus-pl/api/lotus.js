@@ -55,8 +55,9 @@ const actions = {
     for (const s of stores) for (const d of days) {
       const tc = vals[i++], cfg = vals[i++], ov = vals[i++], man = vals[i++], ms = vals[i++];
       const mn = menu.byKey[`mn:${s}:${d}`];
-      const ords = ((mn && mn.history) || []).map((h) => L.mapOrder(h, s, d));
-      // 後から手入力した計上（シフトのカレンダーから）
+      let ords = ((mn && mn.history) || []).map((h) => L.mapOrder(h, s, d));
+      // 後から手入力した計上（シフトのカレンダーから）は、その店舗・日のデジタルメニューの会計と置き換える（二重計上しない）
+      if (ms) { excluded.push(...ords.filter((o) => !o.cancelled).map((o) => ({ ...o, replaced: true }))); ords = []; }
       if (ms) ords.push({ id: 'ms-' + s + d, name: '手入力', store: s, date: d, state: '手入力', cancelled: false, manual: true,
         guests: Number(ms.guests) || 0, kind: '', normal: Number(ms.normal) || 0, late: Number(ms.late) || 0,
         champagne: Number(ms.champagne) || 0, medals: Number(ms.medals) || 0, discount: Number(ms.discount) || 0 });
