@@ -312,3 +312,10 @@ table.tbl{width:100%;border-collapse:collapse;font-size:13px;min-width:720px}
   .eff-row{grid-template-columns:34px 1fr;}
   .eff-bar,.eff-stats{grid-column:2}
 }
+.act-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.act-store{border:1px solid var(--line);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.act-h{display:flex;align-items:center;gap:7px;font-size:14px}
+.act-store .row3{grid-template-columns:1fr 1fr 1fr}
+@media (max-width:760px){.act-grid{grid-template-columns:1fr}}
+.sheet:has(.act-grid){width:min(860px,100%)}
+@media (max-width:760px){.act-att{grid-template-columns:1fr 1fr!important}.act-att>:first-child{grid-column:1/-1}}
