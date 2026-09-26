@@ -314,7 +314,7 @@
   // ---------- edit sheet（打刻・レジ金の修正はこのアプリ内だけで保存） ----------
   const xBtn = '<button class="icon-btn x" data-act="close" aria-label="閉じる"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>';
   function openEdit(id) {
-    const r = data().records.find((x) => x.id === id);
+    const r = data().records.find((x) => x.id === id) || (allData() && allData().records.find((x) => x.id === id));
     if (!r) return;
     openSheet(`
       <div class="sh-h"><div><h2>${esc(r.staff || '')}</h2><div class="sub">${esc(r.store || '')} ・ ${dayLabel(r.date)}(${WD[weekday(r.date)]})${r.holder ? ' ・ 計上担当' : ''}</div></div>${xBtn}</div>
@@ -341,7 +341,7 @@
   }
 
   async function saveEdit(id) {
-    const r = data().records.find((x) => x.id === id);
+    const r = data().records.find((x) => x.id === id) || (allData() && allData().records.find((x) => x.id === id));
     const v = (k) => { const el = $('#f-' + k); return el.value === '' ? null : Number(el.value); };
     const patch = {};
     for (const k of ['hours', 'cash']) { const nv = v(k); if (nv !== r[k]) patch[k] = nv; }
@@ -456,79 +456,91 @@
     }).join('')}</div>` : '<div class="hint">この日の予定はまだありません</div>';
     const extra = recs.filter((r) => !plans.some((p) => p.staff === r.staff && p.store === r.store));
     openSheet(`
-      <div class="sh-h"><div><h2>${dayLabel(ds)}(${WD[weekday(ds)]}) のシフト</h2><div class="sub">${state.store === 'all' ? '全店' : esc(state.store)}</div></div>
+      <div class="sh-h"><div><h2>${dayLabel(ds)}(${WD[weekday(ds)]}) のシフト</h2><div class="sub">${ds <= businessToday() ? '藤井寺店・恵我之荘店' : state.store === 'all' ? '全店' : esc(state.store)}</div></div>
         <button class="icon-btn x" data-act="close" aria-label="閉じる"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
       <div class="sh-b">
         <div class="grp-h">登録済みの予定</div>${list}
         ${extra.length ? `<div class="hint">予定外の出勤：${extra.map((r) => esc(r.staff) + (r.in ? ' ' + hm(r.in) : '')).join('、')}</div>` : ''}
-        ${ds < businessToday() ? actualForm(ds, recs) : ''}
-        <div class="grp-h" style="margin-top:10px">予定を追加</div>
-        ${planForm()}
-        ${ds === businessToday() ? actualForm(ds, recs) : ''}
+        ${ds < businessToday() ? '' : `<div class="grp-h" style="margin-top:10px">予定を追加</div>${planForm()}`}
+        ${ds <= businessToday() ? `<div id="actual">${actualSection(ds)}</div>` : ''}
       </div>
-      <div class="sh-f"><button class="btn" data-act="close">閉じる</button><button class="btn primary" data-act="saveplan">予定を追加する</button></div>`);
+      <div class="sh-f"><button class="btn" data-act="close">閉じる</button>${ds < businessToday() ? '' : '<button class="btn primary" data-act="saveplan">予定を追加する</button>'}</div>`);
+    if (ds <= businessToday() && !allData()) ensureAll().then(() => { const el = $('#actual'); if (el) el.innerHTML = actualSection(ds); });
   }
-  // ---------- 実績を後から入力（出勤・計上） ----------
-  let actStore = null;
-  function actualForm(ds, recs) {
-    const stores = storesInView();
-    if (!actStore || !stores.includes(actStore)) actStore = stores[0];
-    const st = actStore;
-    const d = data();
+  // ---------- 実績を後から入力（出勤・計上）：2店舗まとめて ----------
+  const allKey = () => currentYm() + '|all';
+  const allData = () => state.cache[allKey()];
+  async function ensureAll(force) {
+    if (!force && allData()) return;
+    const j = await api('data', { month: currentYm(), store: 'all' });
+    state.cache[allKey()] = { records: j.records, orders: j.orders, plans: j.plans, errors: j.errors || [], kv: j.kv, startDate: j.startDate || '', at: Date.now() };
+  }
+  function actualSection(ds) {
+    const d = allData();
+    if (!d) return '<div class="grp-h" style="margin-top:10px">実績（後から入力）</div><div class="hint">読み込み中…</div>';
     const sd = d.startDate;
     const staffList = state.meta.staff.length ? state.meta.staff : [];
-    const mine = recs.filter((r) => r.store === st);
-    const menu = d.orders.filter((o) => o.store === st && o.date === ds && !o.manual);
-    const menuSum = sumOrders(menu);
-    const ms = d.orders.find((o) => o.store === st && o.date === ds && o.manual) || {};
-    const v = (k) => (ms[k] ? ms[k] : '');
     const del = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M5 7h14M10 7V5h4v2M7 7l1 12h8l1-12"/></svg>';
-    return `
-      <div class="grp-h" style="margin-top:10px">実績（後から入力）${stores.length > 1 ? '' : ' ・ ' + esc(st)}</div>
+    const block = (st, i) => {
+      const mine = d.records.filter((r) => r.store === st && r.date === ds);
+      const menu = d.orders.filter((o) => o.store === st && o.date === ds && !o.manual);
+      const menuSum = sumOrders(menu);
+      const ms = d.orders.find((o) => o.store === st && o.date === ds && o.manual) || {};
+      const v = (k) => (ms[k] ? ms[k] : '');
+      return `<div class="act-store">
+        <div class="act-h"><span class="dot" style="background:${STORE_VAR[st]}"></span><b>${st}</b></div>
+        <div class="fld"><label>出勤</label>
+          ${mine.length ? `<div class="plist">${mine.map((r) => `<div class="pi"><b>${esc(r.staff)}</b><span class="t">${r.in ? hm(r.in) : '—'}–${r.out ? hm(r.out) : ''}</span>${r.manual ? '<span class="badge mute">手入力</span>' : '<span class="badge ok">打刻</span>'}
+            <button class="linkbtn" data-act="edit" data-id="${r.id}" style="margin-left:auto">修正</button>
+            ${r.manual ? `<button class="del" data-act="delman" data-id="${r.id}" data-store="${st}" data-date="${ds}" aria-label="削除">${del}</button>` : ''}</div>`).join('')}</div>` : '<div class="hint">出勤なし</div>'}
+        </div>
+        <div class="row3 act-att">
+          <div class="fld"><label for="a-staff-${i}">スタッフ</label><select id="a-staff-${i}">${staffList.map((x) => `<option>${esc(x)}</option>`).join('')}</select></div>
+          <div class="fld"><label for="a-in-${i}">出勤</label><input id="a-in-${i}" type="time" value="${DEFAULT_START[st] || '21:00'}"></div>
+          <div class="fld"><label for="a-out-${i}">退勤</label><input id="a-out-${i}" type="time" value=""></div>
+        </div>
+        <div><button class="btn sm" data-act="addman" data-store="${st}" data-i="${i}" data-date="${ds}">＋ 出勤を追加</button></div>
+        <div class="fld" style="margin-top:4px"><label>計上（手入力）</label>
+          ${menu.length ? `<div class="hint">デジタルメニューの会計 ${menu.length}件（通常 ${yen(menuSum.normal)}・開店後 ${yen(menuSum.late)}・シャンパン ${yen(menuSum.champagne)}）に上乗せされます</div>` : ''}</div>
+        <div class="row3">
+          ${[['normal', '通常売上'], ['late', '開店後売上'], ['champagne', 'シャンパン'], ['guests', '客数'], ['medals', 'メダル枚数'], ['discount', 'スタッフ割引']].map(([k, l]) => `<div class="fld"><label for="m-${k}-${i}">${l}</label><input id="m-${k}-${i}" type="number" inputmode="numeric" min="0" value="${v(k)}"></div>`).join('')}
+        </div>
+      </div>`;
+    };
+    return `<div class="grp-h" style="margin-top:10px">実績（後から入力）</div>
       ${sd && ds < sd ? `<div class="recon ng" style="margin:0"><div>この日は集計開始日（${dayLabel(sd)}）より前のため、入力しても売上・給与には出ません。設定タブで集計開始日を変更してください。</div></div>` : ''}
-      ${stores.length > 1 ? `<div class="fld"><label>店舗</label><div class="chips">${STORES.map((x) => `<button type="button" class="chip-sel ${x === st ? 'on' : ''}" data-act="actstore" data-v="${x}" data-date="${ds}">${x}</button>`).join('')}</div></div>` : ''}
-      <div class="fld"><label>出勤したスタッフ</label>
-        ${mine.length ? `<div class="plist">${mine.map((r) => `<div class="pi"><b>${esc(r.staff)}</b><span class="t">${r.in ? hm(r.in) : '—'}–${r.out ? hm(r.out) : ''}</span>${r.manual ? '<span class="badge mute">手入力</span>' : '<span class="badge ok">打刻</span>'}
-          <button class="linkbtn" data-act="edit" data-id="${r.id}" style="margin-left:auto">修正</button>
-          ${r.manual ? `<button class="del" data-act="delman" data-id="${r.id}" data-store="${esc(st)}" data-date="${ds}" aria-label="削除">${del}</button>` : ''}</div>`).join('')}</div>` : '<div class="hint">この日の出勤はありません</div>'}
-      </div>
-      <div class="row3">
-        <div class="fld"><label for="a-staff">スタッフ</label><select id="a-staff">${staffList.map((x) => `<option>${esc(x)}</option>`).join('')}</select></div>
-        <div class="fld"><label for="a-in">出勤</label><input id="a-in" type="time" value="${DEFAULT_START[st] || '21:00'}"></div>
-        <div class="fld"><label for="a-out">退勤</label><input id="a-out" type="time" value=""></div>
-      </div>
-      <div><button class="btn" data-act="addman" data-date="${ds}">＋ 出勤を追加</button></div>
-      <div class="fld" style="margin-top:6px"><label>計上（手入力）</label>
-        <div class="hint">${menu.length ? `デジタルメニューの会計 ${menu.length}件（通常 ${yen(menuSum.normal)}・開店後 ${yen(menuSum.late)}・シャンパン ${yen(menuSum.champagne)}）とは別に加算されます` : 'デジタルメニューの会計がない日は、ここに入力した金額がその日の計上になります'}</div></div>
-      <div class="row3">
-        <div class="fld"><label for="m-normal">通常売上</label><input id="m-normal" type="number" inputmode="numeric" min="0" value="${v('normal')}"></div>
-        <div class="fld"><label for="m-late">開店後売上</label><input id="m-late" type="number" inputmode="numeric" min="0" value="${v('late')}"></div>
-        <div class="fld"><label for="m-champagne">シャンパン</label><input id="m-champagne" type="number" inputmode="numeric" min="0" value="${v('champagne')}"></div>
-        <div class="fld"><label for="m-guests">客数</label><input id="m-guests" type="number" inputmode="numeric" min="0" value="${v('guests')}"></div>
-        <div class="fld"><label for="m-medals">メダル枚数</label><input id="m-medals" type="number" inputmode="numeric" min="0" value="${v('medals')}"></div>
-        <div class="fld"><label for="m-discount">スタッフ割引</label><input id="m-discount" type="number" inputmode="numeric" min="0" value="${v('discount')}"></div>
-      </div>
-      <div><button class="btn" data-act="savems" data-date="${ds}">計上を保存</button> <span class="hint">空欄で保存すると手入力分を削除</span></div>`;
+      <div class="act-grid">${STORES.map(block).join('')}</div>
+      <div><button class="btn primary" data-act="savems" data-date="${ds}">2店舗の計上を保存</button> <span class="hint">空欄で保存すると、その店舗の手入力分を削除</span></div>`;
   }
   const hmToIso = (ds, t) => (t ? `${ds}T${t}:00+09:00` : null);
-  async function addManual(ds) {
-    const staff = $('#a-staff').value, tin = $('#a-in').value, tout = $('#a-out').value;
+  async function afterActual(ds, msg) {
+    toast(msg);
+    for (const k of Object.keys(state.cache)) if (k.startsWith(currentYm() + '|')) delete state.cache[k];
+    await ensureAll(true); await load(true);
+    planDraft.keep = true; openDayPlan(ds);
+  }
+  async function addManual(ds, st, i) {
+    const staff = $('#a-staff-' + i).value, tin = $('#a-in-' + i).value, tout = $('#a-out-' + i).value;
     if (!staff || !tin) { toast('スタッフと出勤時刻を入れてください'); return; }
     const inIso = hmToIso(ds, tin);
     let outIso = hmToIso(ds, tout);
     if (outIso && tout <= tin) outIso = hmToIso(addDays(ds, 1), tout); // 日付をまたぐ退勤
-    try { await api('manualAdd', { store: actStore, date: ds, staff, in: inIso, out: outIso }, true); toast(`${staff} の出勤を追加しました`); await load(true); planDraft.keep = true; openDayPlan(ds); }
+    try { await api('manualAdd', { store: st, date: ds, staff, in: inIso, out: outIso }, true); await afterActual(ds, `${st}：${staff} の出勤を追加しました`); }
     catch (e) { toast(e.message); }
   }
   async function delManual(id, st, ds) {
     if (!confirm('手入力した出勤を削除しますか？')) return;
-    try { await api('manualDelete', { store: st, date: ds, id }, true); toast('削除しました'); await load(true); planDraft.keep = true; openDayPlan(ds); }
+    try { await api('manualDelete', { store: st, date: ds, id }, true); await afterActual(ds, '削除しました'); }
     catch (e) { toast(e.message); }
   }
   async function saveManualSales(ds) {
-    const sales = {}; for (const k of ['normal', 'late', 'champagne', 'guests', 'medals', 'discount']) sales[k] = Number($('#m-' + k).value) || 0;
-    try { const j = await api('manualSales', { store: actStore, date: ds, sales }, true); toast(j.sales ? '計上を保存しました' : '手入力の計上を削除しました'); await load(true); planDraft.keep = true; openDayPlan(ds); }
-    catch (e) { toast(e.message); }
+    try {
+      for (let i = 0; i < STORES.length; i++) {
+        const sales = {}; for (const k of ['normal', 'late', 'champagne', 'guests', 'medals', 'discount']) sales[k] = Number($(`#m-${k}-${i}`).value) || 0;
+        await api('manualSales', { store: STORES[i], date: ds, sales }, true);
+      }
+      await afterActual(ds, '2店舗の計上を保存しました');
+    } catch (e) { toast(e.message); }
   }
 
   function planForm() {
@@ -877,8 +889,7 @@
       case 'resetov': resetOverride(b.dataset.id); break;
       case 'savesettings': saveSettings(); break;
       case 'savestart': saveStart(); break;
-      case 'actstore': actStore = b.dataset.v; planDraft.keep = true; openDayPlan(b.dataset.date); break;
-      case 'addman': addManual(b.dataset.date); break;
+      case 'addman': addManual(b.dataset.date, b.dataset.store, b.dataset.i); break;
       case 'delman': delManual(b.dataset.id, b.dataset.store, b.dataset.date); break;
       case 'savems': saveManualSales(b.dataset.date); break;
       case 'gotoday': state.day = b.dataset.date; state.userPickedDay = true; state.tab = 'daily'; lsSet(LS.tab, 'daily'); renderTabs(); window.scrollTo({ top: 0 }); load(); break;
