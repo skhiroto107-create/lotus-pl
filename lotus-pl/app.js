@@ -9,6 +9,7 @@
   const STORE_VAR = { '藤井寺店': 'var(--s1)', '恵我之荘店': 'var(--s2)' };
   const WD = ['日', '月', '火', '水', '木', '金', '土'];
   const DEFAULT_START = { '藤井寺店': '22:00', '恵我之荘店': '21:00' }; // シフト予定の開始時刻の初期値
+  const DEFAULT_END = { '藤井寺店': '03:00', '恵我之荘店': '02:00' }; // 退勤時刻の初期値
   const BUSINESS_CUTOFF_HOUR = 10; // タイムカードに繋がらないときだけ使う予備の切替時刻(JST)
   let serverBusinessDate = null;   // タイムカードが返す「今日の営業日」
   const LS = { store: 'lotus_sm_store', tab: 'lotus_sm_tab' };
@@ -447,7 +448,7 @@
     const stores = storesInView();
     const plans = d.plans.filter((p) => p.date === ds && stores.includes(p.store));
     const recs = d.records.filter((r) => r.date === ds && stores.includes(r.store));
-    planDraft = planDraft && planDraft.keep ? planDraft : { staff: [], start: DEFAULT_START[stores[0]] || '21:00', end: '', store: stores[0], repeat: 1, startEdited: false };
+    planDraft = planDraft && planDraft.keep ? planDraft : { staff: [], start: DEFAULT_START[stores[0]] || '21:00', end: DEFAULT_END[stores[0]] || '', store: stores[0], repeat: 1, startEdited: false };
     planDraft.date = ds; planDraft.keep = false;
     const list = plans.length ? `<div class="plist">${plans.map((p) => {
       const done = recs.some((r) => r.staff === p.staff && r.store === p.store);
@@ -473,7 +474,7 @@
   async function ensureAll(force) {
     if (!force && allData()) return;
     const j = await api('data', { month: currentYm(), store: 'all' });
-    state.cache[allKey()] = { records: j.records, orders: j.orders, plans: j.plans, errors: j.errors || [], kv: j.kv, startDate: j.startDate || '', at: Date.now() };
+    state.cache[allKey()] = { records: j.records, orders: j.orders, excluded: j.excluded || [], plans: j.plans, errors: j.errors || [], kv: j.kv, startDate: j.startDate || '', at: Date.now() };
   }
   function actualSection(ds) {
     const d = allData();
@@ -483,9 +484,10 @@
     const del = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M5 7h14M10 7V5h4v2M7 7l1 12h8l1-12"/></svg>';
     const block = (st, i) => {
       const mine = d.records.filter((r) => r.store === st && r.date === ds);
-      const menu = d.orders.filter((o) => o.store === st && o.date === ds && !o.manual);
+      const allO = [...d.orders, ...(d.excluded || [])];
+      const menu = allO.filter((o) => o.store === st && o.date === ds && !o.manual);
       const menuSum = sumOrders(menu);
-      const ms = d.orders.find((o) => o.store === st && o.date === ds && o.manual) || {};
+      const ms = allO.find((o) => o.store === st && o.date === ds && o.manual) || {};
       const v = (k) => (ms[k] ? ms[k] : '');
       return `<div class="act-store">
         <div class="act-h"><span class="dot" style="background:${STORE_VAR[st]}"></span><b>${st}</b></div>
@@ -497,9 +499,10 @@
         <div class="row3 act-att">
           <div class="fld"><label for="a-staff-${i}">スタッフ</label><select id="a-staff-${i}">${staffList.map((x) => `<option>${esc(x)}</option>`).join('')}</select></div>
           <div class="fld"><label for="a-in-${i}">出勤</label><input id="a-in-${i}" type="time" value="${DEFAULT_START[st] || '21:00'}"></div>
-          <div class="fld"><label for="a-out-${i}">退勤</label><input id="a-out-${i}" type="time" value=""></div>
+          <div class="fld"><label for="a-out-${i}">退勤</label><input id="a-out-${i}" type="time" value="${DEFAULT_END[st] || ''}"></div>
         </div>
         <div><button class="btn sm" data-act="addman" data-store="${st}" data-i="${i}" data-date="${ds}">＋ 出勤を追加</button></div>
+        ${!mine.length && (menu.length || ms.id) ? '<div class="hint" style="color:var(--warn)">出勤がないため、この店舗の売上は集計されていません。出勤を追加すると反映されます</div>' : ''}
         <div class="fld" style="margin-top:4px"><label>計上（手入力）</label>
           ${menu.length ? `<div class="hint">デジタルメニューの会計 ${menu.length}件（通常 ${yen(menuSum.normal)}・開店後 ${yen(menuSum.late)}・シャンパン ${yen(menuSum.champagne)}）に上乗せされます</div>` : ''}</div>
         <div class="row3">
@@ -551,7 +554,7 @@
       <div class="fld"><label>スタッフ（複数選択可）</label><div class="chips">${staffList.map((s) => `<button type="button" class="chip-sel ${pd.staff.includes(s) ? 'on' : ''}" data-act="pstaff" data-v="${esc(s)}">${esc(s)}</button>`).join('')}</div></div>
       <div class="row3">
         <div class="fld"><label for="p-start">開始</label><input id="p-start" type="time" value="${pd.start}" oninput="this.dataset.edited='1'"></div>
-        <div class="fld"><label for="p-end">終了</label><input id="p-end" type="time" value="${pd.end}"></div>
+        <div class="fld"><label for="p-end">終了</label><input id="p-end" type="time" value="${pd.end}" oninput="this.dataset.edited='1'"></div>
         <div class="fld"><label for="p-rep">繰り返し</label><select id="p-rep">${[1, 2, 3, 4, 5].map((n) => `<option value="${n}" ${pd.repeat === n ? 'selected' : ''}>${n === 1 ? 'この日だけ' : `毎週 ${n}回`}</option>`).join('')}</select></div>
       </div>
       <div class="fld"><label for="p-memo">メモ（任意）</label><input id="p-memo" type="text" placeholder="例：イベント対応" value=""></div>`;
@@ -902,6 +905,7 @@
       case 'pstore': {
         planDraft.store = b.dataset.v; b.parentElement.querySelectorAll('.chip-sel').forEach((x) => x.classList.toggle('on', x === b));
         const st = $('#p-start'); if (st && !st.dataset.edited) st.value = DEFAULT_START[b.dataset.v] || st.value; // 店舗を切り替えたら開始時刻の初期値も切り替え
+        const en = $('#p-end'); if (en && !en.dataset.edited) en.value = DEFAULT_END[b.dataset.v] || en.value;
         break;
       }
       case 'saveplan': savePlan(); break;
