@@ -489,7 +489,7 @@
       const menu = allO.filter((o) => o.store === st && o.date === ds && !o.manual);
       const menuSum = sumOrders(menu);
       const ms = allO.find((o) => o.store === st && o.date === ds && o.manual) || {};
-      const v = (k) => (ms[k] ? ms[k] : '');
+      const v = (k) => (ms[k] ? ms[k] : 0); // 空欄は0
       return `<div class="act-store">
         <div class="act-h"><span class="dot" style="background:${STORE_VAR[st]}"></span><b>${st}</b></div>
         <div class="fld"><label>出勤</label>
@@ -514,7 +514,7 @@
     return `<div class="grp-h" style="margin-top:10px">実績（後から入力）</div>
       ${sd && ds < sd ? `<div class="recon ng" style="margin:0"><div>この日は集計開始日（${dayLabel(sd)}）より前のため、入力しても売上・給与には出ません。設定タブで集計開始日を変更してください。</div></div>` : ''}
       <div class="act-grid">${STORES.map(block).join('')}</div>
-      <div><button class="btn primary" data-act="savems" data-date="${ds}">2店舗の計上を保存</button> <span class="hint">空欄で保存すると、その店舗の手入力分を削除</span></div>`;
+      <div><button class="btn primary" data-act="savems" data-date="${ds}">2店舗の計上を保存</button> <span class="hint">空欄は0として保存（すべて0ならその店舗の手入力分を削除）</span></div>`;
   }
   const hmToIso = (ds, t) => (t ? `${ds}T${t}:00+09:00` : null);
   async function afterActual(ds, msg) {
