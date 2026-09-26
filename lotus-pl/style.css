@@ -319,3 +319,10 @@ table.tbl{width:100%;border-collapse:collapse;font-size:13px;min-width:720px}
 @media (max-width:760px){.act-grid{grid-template-columns:1fr}}
 .sheet:has(.act-grid){width:min(860px,100%)}
 @media (max-width:760px){.act-att{grid-template-columns:1fr 1fr!important}.act-att>:first-child{grid-column:1/-1}}
+/* 登録済みのシフト（黄色） */
+:root{--plan-bg:#fff4b8;--plan-line:#e8c93a;--plan-ink:#6e5800}
+@media (prefers-color-scheme:dark){:root{--plan-bg:#3a3212;--plan-line:#a8891c;--plan-ink:#f3d75e}}
+.chip.plan{background:var(--plan-bg);border-color:var(--plan-line);color:var(--plan-ink)}
+.chip.plan .t{color:var(--plan-ink);opacity:.8}
+.plist .pi.plan{background:var(--plan-bg);color:var(--plan-ink)}
+.plist .pi.plan .t{color:var(--plan-ink)}
