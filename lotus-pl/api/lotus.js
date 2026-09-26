@@ -46,17 +46,23 @@ const actions = {
     const menu = await L.syncMenu(stores, days, { today, force: !!force });
     errors.push(...menu.errors.slice(0, 2));
     const keys = [];
-    for (const s of stores) for (const d of days) keys.push(`tc:${s}:${d}`, `day:${s}:${d}`, `ov:${s}:${d}`);
+    for (const s of stores) for (const d of days) keys.push(`tc:${s}:${d}`, `day:${s}:${d}`, `ov:${s}:${d}`, `man:${s}:${d}`, `ms:${s}:${d}`);
     const vals = keys.length ? await L.getJSON(keys) : [];
     const [settings, plansAll] = await L.getJSON(['settings', `plans:${month}`]);
     const records = [], orders = [];
     const startDate = (settings && settings.startDate) || '';
     let i = 0;
     for (const s of stores) for (const d of days) {
-      const tc = vals[i++], cfg = vals[i++], ov = vals[i++];
+      const tc = vals[i++], cfg = vals[i++], ov = vals[i++], man = vals[i++], ms = vals[i++];
       const mn = menu.byKey[`mn:${s}:${d}`];
       const ords = ((mn && mn.history) || []).map((h) => L.mapOrder(h, s, d));
-      const day = L.buildDay(s, d, (tc && tc.records) || [], ords, cfg, ov, settings);
+      // 後から手入力した計上（シフトのカレンダーから）
+      if (ms) ords.push({ id: 'ms-' + s + d, name: '手入力', store: s, date: d, state: '手入力', cancelled: false, manual: true,
+        guests: Number(ms.guests) || 0, kind: '', normal: Number(ms.normal) || 0, late: Number(ms.late) || 0,
+        champagne: Number(ms.champagne) || 0, medals: Number(ms.medals) || 0, discount: Number(ms.discount) || 0 });
+      // タイムカードの打刻 ＋ 後から手入力した出勤
+      const tcRecs = [...((tc && tc.records) || []), ...((man || []).map((m) => ({ ...m, manual: true })))];
+      const day = L.buildDay(s, d, tcRecs, ords, cfg, ov, settings);
       if (startDate && d < startDate) continue; // 集計開始日より前は含めない
       records.push(...day.records);
       orders.push(...ords.filter((o) => !o.cancelled));
@@ -141,6 +147,37 @@ const actions = {
     if (champagneRate !== undefined) s.champagneRate = pct(champagneRate);
     await L.setJSON([['settings', s]]);
     return { settings: s };
+  },
+
+  // 出勤を後から追加（打刻忘れ・アプリ導入前の日など）
+  async manualAdd({ store, date, staff, in: inIso, out: outIso }, { write }) {
+    write();
+    if (!L.STORES.includes(store) || !L.isDate(date) || !staff) throw L.httpError(400, '店舗・日付・スタッフを入力してください');
+    const key = `man:${store}:${date}`;
+    const [cur] = await L.getJSON([key]);
+    const rec = { id: 'm' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), staff: String(staff), store, date,
+      in: inIso || null, out: outIso || null, hours: L.diffHours(inIso, outIso), tcNormal: null, startCash: null };
+    await L.setJSON([[key, [...(cur || []), rec]]]);
+    return { record: rec };
+  },
+  async manualDelete({ store, date, id }, { write }) {
+    write();
+    if (!L.STORES.includes(store) || !L.isDate(date) || !id) throw L.httpError(400, '入力内容を確認してください');
+    const key = `man:${store}:${date}`;
+    const [cur] = await L.getJSON([key]);
+    const next = (cur || []).filter((r) => r.id !== id);
+    await L.setJSON([[key, next.length ? next : null]]);
+    return { ok: true };
+  },
+  // 計上を後から入力（デジタルメニューを使わなかった日など）。空で保存すると削除
+  async manualSales({ store, date, sales }, { write }) {
+    write();
+    if (!L.STORES.includes(store) || !L.isDate(date)) throw L.httpError(400, '入力内容を確認してください');
+    const f = {};
+    for (const k of ['normal', 'late', 'champagne', 'medals', 'discount', 'guests']) f[k] = Math.max(0, Math.round(Number((sales || {})[k]) || 0));
+    const empty = Object.values(f).every((v) => !v);
+    await L.setJSON([[`ms:${store}:${date}`, empty ? null : f]]);
+    return { ok: true, sales: empty ? null : f };
   },
 
   async checkPin(_, { write }) { write(); return { ok: true }; },
