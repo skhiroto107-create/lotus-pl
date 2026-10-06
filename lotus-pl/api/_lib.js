@@ -9,6 +9,8 @@ const MENU_KEY = { '藤井寺店': 'fujiidera', '恵我之荘店': 'egaoshou' };
 
 // スタッフバックの率（Notion の計算式と同じ）
 const BACK = { normal: 0.1, late: 0.5, champagne: 0.2, medal: 50 };
+// 時間給はこの時刻（営業日の翌朝・日本時間）で止める
+const WAGE_END = { '藤井寺店': '04:00', '恵我之荘店': '03:00' };
 
 function httpError(status, message) {
   const e = new Error(message);
@@ -180,10 +182,17 @@ function buildDay(store, date, tcRecords, orders, dayCfg, overrides, settings) {
     const outI = 'out' in ov ? ov.out : r.out;
     // 稼働時間: 手入力 > (出勤・退勤を修正した場合は)修正後の打刻から計算 > タイムカードの値 > 打刻から計算
     const timeEdited = 'in' in ov || 'out' in ov;
-    const hours = 'hours' in ov && ov.hours != null ? ov.hours
+    let hours = 'hours' in ov && ov.hours != null ? ov.hours
       : timeEdited ? diffHours(inI, outI)
       : r.hours != null ? r.hours : diffHours(inI, outI);
-    return { id: r.id, staff: r.staff, store, date, in: inI, out: outI, hours, cash: 'cash' in ov ? ov.cash : r.startCash, tcNormal: r.tcNormal, edited: Object.keys(ov).length > 0, manual: !!r.manual };
+    // 時間給の停止時刻（藤井寺 4:00・恵我之荘 3:00）を過ぎた分は数えない（稼働時間を手入力した場合はそのまま）
+    let capped = false;
+    const endAt = WAGE_END[store] ? `${addDays(date, 1)}T${WAGE_END[store]}:00+09:00` : null;
+    if (!('hours' in ov && ov.hours != null) && endAt && inI && outI && new Date(outI) > new Date(endAt)) {
+      const max = new Date(inI) >= new Date(endAt) ? 0 : diffHours(inI, endAt);
+      if (hours == null || hours > max) { hours = max; capped = true; }
+    }
+    return { id: r.id, staff: r.staff, store, date, in: inI, out: outI, hours, capped, wageEnd: WAGE_END[store] || null, cash: 'cash' in ov ? ov.cash : r.startCash, tcNormal: r.tcNormal, edited: Object.keys(ov).length > 0, manual: !!r.manual };
   });
   // 計上担当（売上とバックが付く人）: 手動指定 > タイムカードの日締め代表 > 最初に出勤した人
   let holder = null;
@@ -221,6 +230,6 @@ function buildDay(store, date, tcRecords, orders, dayCfg, overrides, settings) {
 }
 
 module.exports = {
-  STORES, BACK, httpError, getJSON, setJSON, kvHasStore, addDays, monthDays, isDate, isYm,
+  STORES, BACK, WAGE_END, httpError, getJSON, setJSON, kvHasStore, addDays, monthDays, isDate, isYm,
   syncTimecard, syncMenu, mapOrder, buildDay, diffHours,
 };
