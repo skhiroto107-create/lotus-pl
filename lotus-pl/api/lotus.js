@@ -184,6 +184,7 @@ const actions = {
 
   async checkPin(_, { write }) { write(); return { ok: true }; },
 };
+Object.assign(actions, require('./_inv')); // 在庫管理（inv*）
 
 module.exports = async (req, res) => {
   res.setHeader('Cache-Control', 'no-store');
