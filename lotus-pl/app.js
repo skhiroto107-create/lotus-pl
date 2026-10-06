@@ -11,6 +11,8 @@
   const DEFAULT_START = { '藤井寺店': '22:00', '恵我之荘店': '21:00' }; // シフト予定の開始時刻の初期値
   const DEFAULT_END = { '藤井寺店': '03:00', '恵我之荘店': '02:00' }; // 退勤時刻の初期値
   const DEFAULT_STAFF = 'ひろと'; // 出勤を追加するときのスタッフの初期値
+  const WAGE_END = { '藤井寺店': '04:00', '恵我之荘店': '03:00' }; // 時間給の停止時刻（営業日の翌朝）。api/_lib.js と同じ
+  const wageEndLabel = (st) => (WAGE_END[st] ? String(Number(WAGE_END[st].slice(0, 2))) + ':' + WAGE_END[st].slice(3) : '');
   const BUSINESS_CUTOFF_HOUR = 10; // タイムカードに繋がらないときだけ使う予備の切替時刻(JST)
   let serverBusinessDate = null;   // タイムカードが返す「今日の営業日」
   const LS = { store: 'lotus_sm_store', tab: 'lotus_sm_tab' };
@@ -273,7 +275,7 @@
       const planned = plans.find((p) => p.staff === r.staff);
       let tm;
       if (!r.in) tm = '<span class="badge warn">出勤未打刻</span>';
-      else tm = `<span class="times">${hm(r.in)} – ${r.out ? hm(r.out) : ''}</span>${r.out ? '' : ' <span class="badge warn">退勤未打刻</span>'}`;
+      else tm = `<span class="times">${hm(r.in)} – ${r.out ? hm(r.out) : ''}</span>${r.out ? '' : ' <span class="badge warn">退勤未打刻</span>'}${r.capped ? ` <span class="badge mute" title="${wageEndLabel(r.store)}以降は時間給なし">${wageEndLabel(r.store)}で時給停止</span>` : ''}`;
       return `<button class="srow" data-act="edit" data-id="${r.id}">
         <div class="c-nm nm"><span>${esc(r.staff || '（未選択）')}</span>${r.holder ? '<span class="badge ok">計上担当</span>' : ''}${r.manual ? '<span class="badge mute">手入力</span>' : ''}${r.edited ? '<span class="badge mute">修正済</span>' : ''}${planned ? '' : '<span class="badge mute">予定外</span>'}</div>
         <div class="c-tm">${tm}</div>
@@ -327,11 +329,11 @@
           <div class="fld"><label for="f-out">退勤</label><input id="f-out" type="datetime-local" value="${toLocalInput(r.out)}" data-live="time"></div>
         </div>
         <div class="row2">
-          <div class="fld"><div class="aux"><label for="f-hours">稼働時間（h）</label><button type="button" class="linkbtn" data-act="calchours">打刻から計算</button></div><input id="f-hours" type="number" inputmode="decimal" step="0.25" min="0" value="${r.hours == null ? '' : r.hours}" data-live="hours" data-rate="${r.rate || 0}" data-back="${backOf(r)}"></div>
+          <div class="fld"><div class="aux"><label for="f-hours">稼働時間（h）</label><button type="button" class="linkbtn" data-act="calchours">打刻から計算</button></div><input id="f-hours" type="number" inputmode="decimal" step="0.25" min="0" value="${r.hours == null ? '' : r.hours}" data-live="hours" data-rate="${r.rate || 0}" data-back="${backOf(r)}" data-store="${esc(r.store)}" data-date="${r.date}"></div>
           <div class="fld"><label for="f-cash">スタート/レジ金</label><input id="f-cash" type="number" inputmode="numeric" step="1" value="${r.cash == null ? '' : r.cash}"></div>
         </div>
         <dl class="kv" style="margin-top:4px">
-          <dt>時間給（${r.rate ? yen(r.rate) + '/h' : '時給未設定'}）</dt><dd id="lv-wage">${yen(r.wage)}</dd>
+          <dt>時間給（${r.rate ? yen(r.rate) + '/h' : '時給未設定'}・${wageEndLabel(r.store)}で停止）</dt><dd id="lv-wage">${yen(r.wage)}</dd>
           <dt>通常バック 10% / 開店後バック 50%</dt><dd>${yen(r.normalBack)} / ${yen(r.lateBack)}</dd>
           <dt>シャンパンバック 20% / メダル ¥50</dt><dd>${yen(r.champagneBack)} / ${yen(r.medalBack)}</dd>
           <div class="sep"></div>
@@ -366,10 +368,19 @@
   function calcHours() {
     const a = $('#f-in').value, b = $('#f-out').value;
     if (!a || !b) { toast('出勤と退勤を入力してください'); return; }
-    const h = (new Date(fromLocalInput(b)) - new Date(fromLocalInput(a))) / 3600e3;
+    const h = capHours(a, b);
     if (h < 0) { toast('退勤が出勤より前になっています'); return; }
     $('#f-hours').value = Math.round(h * 100) / 100;
     livePreview();
+  }
+  // 出勤〜退勤の時間（時間給の停止時刻を過ぎた分は数えない）
+  function capHours(a, b) {
+    const el = $('#f-hours'), st = el && el.dataset.store, d = el && el.dataset.date;
+    const s = new Date(fromLocalInput(a)), e = new Date(fromLocalInput(b));
+    let end = e;
+    if (WAGE_END[st] && d) { const lim = new Date(`${addDays(d, 1)}T${WAGE_END[st]}:00+09:00`); if (end > lim) end = lim; }
+    if (e < s) return -1;
+    return Math.max(0, (end - s) / 3600e3);
   }
   // 編集中に稼働時間から時間給・給料をその場で再計算して表示
   function livePreview() {
@@ -386,7 +397,7 @@
     // 出勤・退勤を変えたら稼働時間も自動で計算し直す
     if (k === 'time') {
       const a = $('#f-in').value, b = $('#f-out').value;
-      if (a && b) { const h = (new Date(fromLocalInput(b)) - new Date(fromLocalInput(a))) / 3600e3; if (h >= 0) { $('#f-hours').value = Math.round(h * 100) / 100; livePreview(); } }
+      if (a && b) { const h = capHours(a, b); if (h >= 0) { $('#f-hours').value = Math.round(h * 100) / 100; livePreview(); } }
     }
   });
 
@@ -842,7 +853,7 @@
     const wages = (m.settings && m.settings.wages) || {};
     const staff = [...new Set([...(m.staff || []), ...Object.keys(wages)])];
     return `<div class="card" style="max-width:640px">
-      <div class="card-h"><h3>時給</h3><span class="hint">時間給 = 稼働時間 × 時給</span></div>
+      <div class="card-h"><h3>時給</h3><span class="hint">時間給 = 稼働時間 × 時給（藤井寺店は4:00、恵我之荘店は3:00で時間給停止）</span></div>
       <div class="card-b" style="display:flex;flex-direction:column;gap:12px">
         <div class="fld"><label for="w-default">標準の時給（個別に入れていないスタッフに適用）</label><input id="w-default" type="number" inputmode="numeric" min="0" step="10" value="${(m.settings && m.settings.defaultWage) || ''}" placeholder="例：1100"></div>
         <div class="row3">${staff.map((s) => `<div class="fld"><label>${esc(s)}</label><input type="number" inputmode="numeric" min="0" step="10" data-wage="${esc(s)}" value="${wages[s] == null ? '' : wages[s]}" placeholder="標準"></div>`).join('')}</div>
