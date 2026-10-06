@@ -87,7 +87,7 @@
     showTable: false,
   };
   if (!['藤井寺店', '恵我之荘店', 'all'].includes(state.store)) state.store = STORES[0];
-  if (!['daily', 'shift', 'pay', 'sales', 'settings'].includes(state.tab)) state.tab = 'daily';
+  if (!['daily', 'shift', 'pay', 'sales', 'inv', 'settings'].includes(state.tab)) state.tab = 'daily';
 
   // ---------- API ----------
   async function api(action, payload = {}, write = false) {
@@ -174,7 +174,7 @@
       m.innerHTML = head + `<div class="err"><b>読み込めませんでした</b><br>${esc(state.error)}<br><span class="hint">通信状況と、Vercel の Upstash Redis 連携（KV_REST_API_URL / KV_REST_API_TOKEN）を確認してください。</span></div>`;
       return;
     }
-    const body = state.tab === 'daily' ? viewDaily() : state.tab === 'shift' ? viewShift() : state.tab === 'pay' ? viewPay() : state.tab === 'sales' ? viewSales() : viewSettings();
+    const body = state.tab === 'daily' ? viewDaily() : state.tab === 'shift' ? viewShift() : state.tab === 'pay' ? viewPay() : state.tab === 'sales' ? viewSales() : state.tab === 'inv' ? (window.LotusInv ? window.LotusInv.view() : '') : viewSettings();
     m.innerHTML = head + banner() + body;
     if (state.tab === 'sales') bindChart();
   }
@@ -715,6 +715,7 @@
         <div class="pl-row sub"><span>− バック（通常10%・開店後50%・シャンパン20%・メダル¥50）</span><b>−${yen(rs.back)}</b></div>
         <div class="pl-row sub"><span>− 時間給</span><b>−${yen(rs.wage)}</b></div>
         <div class="pl-row total ${gp.profit < 0 ? 'neg' : ''}"><span>粗利 <small>粗利率 ${os.gross ? Math.round((gp.profit / os.gross) * 1000) / 10 : 0}%</small></span><b>${yen(gp.profit)}</b></div>
+        ${window.LotusInv ? window.LotusInv.salesNote(stores, gp.profit) : ''}
       </div></div></div>
     ${salesCalendar(stores, recs, orders)}`;
 
@@ -923,6 +924,7 @@
       case 'delplan': delPlan(b.dataset.id); break;
       case 'togglestaff': state.openStaff[b.dataset.v] = !state.openStaff[b.dataset.v]; render(); break;
       case 'toggletable': state.showTable = !state.showTable; render(); break;
+      default: if (act.startsWith('inv') && window.LotusInv) window.LotusInv.act(act, b, e); // 在庫（inv.js）
     }
   });
   document.addEventListener('change', (e) => {
@@ -930,6 +932,9 @@
   });
   // 画面に戻ってきたら最新化（打刻・会計が他端末で進むため）
   document.addEventListener('visibilitychange', () => { if (!document.hidden && Date.now() - (data().at || 0) > 60e3) { invalidate(); load(true); } });
+
+  // 在庫タブ（inv.js）から使う共通の部品
+  window.LotusPL = { state, api, render, openSheet, closeSheet, toast, esc, yen, nz, STORES, STORE_VAR, businessToday, storesInView, monthOf, dayLabel, $ };
 
   // ---------- boot ----------
   renderStoreSeg(); renderTabs();
