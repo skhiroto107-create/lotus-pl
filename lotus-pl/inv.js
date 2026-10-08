@@ -211,7 +211,7 @@
       <div class="sh-b">
         <div class="fld"><label for="i-name">商品名</label><input id="i-name" value="${esc(it ? it.name : '')}" placeholder="例：鏡月 1.8L"></div>
         <div class="row3">
-          <div class="fld"><label for="i-cat">カテゴリ</label><input id="i-cat" list="i-cats" value="${esc(cat || '')}"><datalist id="i-cats">${CATS.map((c) => `<option value="${esc(c)}">`).join('')}</datalist></div>
+          <div class="fld"><label for="i-cat">カテゴリ</label><select id="i-cat">${[...new Set([...CATS, ...inv.items.map((x) => x.category).filter(Boolean)])].map((c) => `<option value="${esc(c)}" ${c === (cat || CATS[0]) ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select></div>
           <div class="fld"><label for="i-unit">単位</label><input id="i-unit" list="i-units" value="${esc(it ? it.unit : '本')}"><datalist id="i-units">${UNITS.map((c) => `<option value="${esc(c)}">`).join('')}</datalist></div>
           <div class="fld"><label for="i-loc">保管場所</label><input id="i-loc" value="${esc(it ? it.location || '' : '')}" placeholder="例：バックヤード棚"></div>
         </div>
