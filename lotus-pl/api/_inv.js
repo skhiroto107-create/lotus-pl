@@ -56,6 +56,7 @@ module.exports = {
       location: str(item.location, 40), memo: str(item.memo, 200),
       minStock: perStore(item.minStock), stock: prev ? { ...(prev.stock || {}) } : {},
       suppliers, created: prev ? prev.created : Date.now(), updated: Date.now(),
+      order: prev ? prev.order : items.reduce((m, x) => Math.max(m, x.order == null ? -1 : x.order), -1) + 1,
     };
     const d = L.isDate(date) ? date : new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
     const log = [];
@@ -71,6 +72,18 @@ module.exports = {
     await L.setJSON([['inv:items', items]]);
     await appendLog(log);
     return { item: next };
+  },
+
+  // 並び順の保存（ids の順に order を振り直す）
+  async invOrder({ ids }, { write }) {
+    write();
+    if (!Array.isArray(ids)) throw L.httpError(400, 'ids が必要です');
+    const items = await loadItems();
+    const pos = new Map(ids.map((id, i) => [String(id), i]));
+    let next = ids.length;
+    for (const it of [...items].sort((a, b) => (a.order == null ? 1e9 : a.order) - (b.order == null ? 1e9 : b.order))) it.order = pos.has(it.id) ? pos.get(it.id) : next++;
+    await L.setJSON([['inv:items', items]]);
+    return { ok: true };
   },
 
   async invDelete({ id }, { write }) {
