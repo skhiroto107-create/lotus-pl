@@ -15,7 +15,15 @@
   try { view = localStorage.getItem(LSV) || 'list'; } catch (e) {}
   if (!VIEWS.some(([k]) => k === view)) view = 'list';
 
-  const inv = { items: null, log: {}, loading: false, error: '', cat: '', q: '', countStore: null };
+  const inv = { items: null, log: {}, loading: false, error: '', cat: '', q: '', countStore: null, reorder: false };
+  // 並び順：manual＝自分で決めた順（並び替えボタンで変更）／cat＝カテゴリ別／name＝名前順／low＝在庫が少ない順
+  const SORTS = [['manual', '自分の並び順'], ['cat', 'カテゴリ別'], ['name', '名前順'], ['low', '在庫が少ない順']];
+  const LSS = 'lotus_inv_sort';
+  let sortBy = 'manual';
+  try { sortBy = localStorage.getItem(LSS) || 'manual'; } catch (e) {}
+  if (!SORTS.some(([k]) => k === sortBy)) sortBy = 'manual';
+  // 自分の並び順（order）→ 登録順
+  const ordered = (xs) => [...xs].sort((a, b) => (a.order == null ? 1e9 : a.order) - (b.order == null ? 1e9 : b.order) || (a.created || 0) - (b.created || 0));
   const n2 = (v) => (Math.round((Number(v) || 0) * 100) / 100);
   const fmtQ = (v, unit) => `${n2(v).toLocaleString('ja-JP')}${unit ? `<small>${esc(unit)}</small>` : ''}`;
   const stock = (it, s) => n2((it.stock || {})[s]);
@@ -85,13 +93,31 @@
       <div class="chips"><button class="chip-sel ${inv.cat ? '' : 'on'}" data-act="invcat" data-v="">すべて</button>${cats.map((c) => `<button class="chip-sel ${inv.cat === c ? 'on' : ''}" data-act="invcat" data-v="${esc(c)}">${esc(c)}</button>`).join('')}</div>
       <input type="search" class="inv-q" id="inv-q" placeholder="商品名・保管場所で検索" value="${esc(inv.q)}">
     </div>`;
-    const groups = cats.filter((c) => !inv.cat || inv.cat === c).map((c) => {
-      const rows = shown.filter((it) => (it.category || 'その他') === c).sort((a, b) => a.name.localeCompare(b.name, 'ja'));
-      if (!rows.length) return '';
-      return `<div class="inv-g"><div class="grp-h inv-cat">${esc(c)} <span>${rows.length}</span></div>` + rows.map((it) => itemRow(it, stores)).join('') + '</div>';
-    }).join('');
+    if (inv.reorder) sortBy = 'manual';
+    const sortBar = `<div class="inv-sortbar">
+      <label class="hint" for="inv-sort">並び順</label>
+      <select id="inv-sort" class="inv-sort" ${inv.reorder ? 'disabled' : ''}>${SORTS.map(([k, l]) => `<option value="${k}" ${sortBy === k ? 'selected' : ''}>${l}</option>`).join('')}</select>
+      <span class="spacer"></span>
+      ${inv.reorder ? '<span class="hint">≡ をドラッグ、または ↑↓ で移動</span><button class="btn sm primary" data-act="invreorder">完了</button>' : '<button class="btn sm" data-act="invreorder">並び替え</button>'}
+    </div>`;
+    let groups;
+    if (sortBy === 'cat') {
+      groups = cats.filter((c) => !inv.cat || inv.cat === c).map((c) => {
+        const rows = ordered(shown.filter((it) => (it.category || 'その他') === c));
+        if (!rows.length) return '';
+        return `<div class="inv-g"><div class="grp-h inv-cat">${esc(c)} <span>${rows.length}</span></div>` + rows.map((it) => itemRow(it, stores)).join('') + '</div>';
+      }).join('');
+    } else {
+      let rows = ordered(shown);
+      if (sortBy === 'name') rows = [...shown].sort((a, b) => a.name.localeCompare(b.name, 'ja'));
+      if (sortBy === 'low') {
+        const ratio = (it) => Math.min(...stores.map((s) => { const m = minOf(it, s); return m ? stock(it, s) / m : stock(it, s) + 1e3; }));
+        rows = [...shown].sort((a, b) => ratio(a) - ratio(b));
+      }
+      groups = `<div class="inv-g ${inv.reorder ? 'reorder' : ''}" id="inv-flat">` + rows.map((it) => itemRow(it, stores)).join('') + '</div>';
+    }
     setTimeout(applySearch, 0);
-    return tiles + filters + `<div class="card inv-list">${groups || ''}<div class="empty" id="inv-none" style="display:none">該当する商品がありません</div></div>`;
+    return tiles + filters + sortBar + `<div class="card inv-list">${groups || ''}<div class="empty" id="inv-none" style="display:none">該当する商品がありません</div></div>`;
   }
 
   function itemRow(it, stores) {
@@ -101,8 +127,9 @@
       const m = minOf(it, s);
       return `<div class="inv-st ${low(it, s) ? 'low' : ''}">${stores.length > 1 ? `<i style="background:${STORE_VAR[s]}"></i>` : ''}<b>${fmtQ(stock(it, s), it.unit)}</b>${m ? `<span>発注 ${n2(m)}</span>` : ''}</div>`;
     }).join('');
-    return `<div class="inv-row" data-s="${esc((it.name + ' ' + (it.location || '') + ' ' + (it.memo || '')).toLowerCase())}">
-      <button class="inv-main" data-act="invedit" data-id="${it.id}">
+    const mv = inv.reorder ? `<div class="inv-mv"><span class="inv-handle" data-id="${it.id}" aria-label="ドラッグで移動">≡</span><button class="icon-btn" data-act="invmove" data-id="${it.id}" data-d="-1" aria-label="上へ">↑</button><button class="icon-btn" data-act="invmove" data-id="${it.id}" data-d="1" aria-label="下へ">↓</button></div>` : '';
+    return `<div class="inv-row ${inv.reorder ? 'mv' : ''}" data-id="${it.id}" data-s="${esc((it.name + ' ' + (it.location || '') + ' ' + (it.memo || '')).toLowerCase())}">
+      ${mv}<button class="inv-main" data-act="invedit" data-id="${it.id}">
         <div class="inv-nm"><b>${esc(it.name)}</b>${isLow ? '<span class="badge bad">要発注</span>' : ''}</div>
         <div class="inv-sub">${it.location ? `📍${esc(it.location)}　` : ''}${c ? `最安 <b>${yen(c.price)}</b> ${esc(c.name)}` : '<span class="hint">仕入れ先未登録</span>'}</div>
       </button>
@@ -113,7 +140,7 @@
 
   function viewOrder(stores) {
     const blocks = stores.map((s) => {
-      const rows = inv.items.filter((it) => low(it, s)).sort((a, b) => (a.category || '').localeCompare(b.category || '', 'ja'));
+      const rows = ordered(inv.items.filter((it) => low(it, s)));
       const total = rows.reduce((a, it) => { const c = cheapest(it); return a + (c ? Math.max(1, minOf(it, s) - stock(it, s) + 1) * c.price : 0); }, 0);
       const list = rows.length ? rows.map((it) => {
         const c = cheapest(it); const need = Math.max(1, n2(minOf(it, s) - stock(it, s) + 1));
@@ -165,7 +192,7 @@
     const stores = storesInView();
     if (!inv.countStore || !stores.includes(inv.countStore)) inv.countStore = stores[0];
     const s = inv.countStore;
-    const items = [...inv.items].sort((a, b) => ((a.category || '') + a.name).localeCompare((b.category || '') + b.name, 'ja'));
+    const items = sortBy === 'cat' ? ordered(inv.items).sort((a, b) => (CATS.indexOf(a.category) + 99) % 99 - (CATS.indexOf(b.category) + 99) % 99) : sortBy === 'name' ? [...inv.items].sort((a, b) => a.name.localeCompare(b.name, 'ja')) : ordered(inv.items);
     if (!items.length) return '<div class="card"><div class="empty"><b>商品がまだありません</b>先に「商品を追加」から登録してください。</div></div>';
     let cat = '';
     const rows = items.map((it) => {
@@ -323,6 +350,50 @@
     const none = $('#inv-none'); if (none) none.style.display = any ? 'none' : '';
   }
 
+  // ---------- 並び替え ----------
+  // 画面に出ている行の順番を、全体の並び順に反映して保存（絞り込み中は、その中だけ入れ替わる）
+  let saveT = null;
+  function commitOrder() {
+    const vis = [...document.querySelectorAll('#inv-flat .inv-row')].map((r) => r.dataset.id);
+    const full = ordered(inv.items).map((x) => x.id);
+    const slots = full.map((id, i) => (vis.includes(id) ? i : -1)).filter((i) => i >= 0);
+    slots.forEach((pos, k) => { full[pos] = vis[k]; });
+    full.forEach((id, i) => { const it = inv.items.find((x) => x.id === id); if (it) it.order = i; });
+    clearTimeout(saveT);
+    saveT = setTimeout(async () => { try { await api('invOrder', { ids: full }, true); toast('並び順を保存しました'); } catch (e) { toast(e.message); } }, 700);
+  }
+  function moveItem(id, d) {
+    const row = document.querySelector(`#inv-flat .inv-row[data-id="${id}"]`); if (!row) return;
+    const sib = d < 0 ? row.previousElementSibling : row.nextElementSibling; if (!sib) return;
+    d < 0 ? sib.before(row) : sib.after(row);
+    commitOrder();
+  }
+  // ≡ をつかんで上下にドラッグ（iPad・スマホの指でも動く）
+  let drag = null;
+  document.addEventListener('pointerdown', (e) => {
+    const h = e.target.closest('.inv-handle'); if (!h) return;
+    const row = h.closest('.inv-row'); if (!row) return;
+    e.preventDefault();
+    drag = { row, id: h.dataset.id };
+    row.classList.add('dragging');
+    try { h.setPointerCapture(e.pointerId); } catch (x) {}
+  });
+  document.addEventListener('pointermove', (e) => {
+    if (!drag) return;
+    e.preventDefault();
+    const list = document.getElementById('inv-flat'); if (!list) return;
+    const rows = [...list.querySelectorAll('.inv-row')].filter((r) => r !== drag.row);
+    const after = rows.find((r) => { const b = r.getBoundingClientRect(); return e.clientY < b.top + b.height / 2; });
+    after ? after.before(drag.row) : list.append(drag.row);
+    const y = e.clientY; if (y < 70) window.scrollBy(0, -12); else if (y > window.innerHeight - 90) window.scrollBy(0, 12);
+  }, { passive: false });
+  const endDrag = () => { if (!drag) return; drag.row.classList.remove('dragging'); drag = null; commitOrder(); };
+  document.addEventListener('pointerup', endDrag);
+  document.addEventListener('pointercancel', endDrag);
+  document.addEventListener('change', (e) => {
+    if (e.target.id === 'inv-sort') { sortBy = e.target.value; try { localStorage.setItem(LSS, sortBy); } catch (x) {} P.render(); }
+  });
+
   // ---------- events ----------
   function act(a, b) {
     switch (a) {
@@ -340,6 +411,8 @@
       case 'invcountsave': saveCount(); break;
       case 'invlogdel': delLog(b.dataset.id); break;
       case 'invcopy': copyOrder(b.dataset.store); break;
+      case 'invreorder': inv.reorder = !inv.reorder; if (inv.reorder) { sortBy = 'manual'; inv.q = ''; } P.render(); break;
+      case 'invmove': moveItem(b.dataset.id, Number(b.dataset.d)); break;
     }
   }
   document.addEventListener('input', (e) => {
