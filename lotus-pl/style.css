@@ -395,3 +395,23 @@ table.tbl{width:100%;border-collapse:collapse;font-size:13px;min-width:720px}
   .inv-q{width:100%}
 }
 .inv-filter .chip-sel{white-space:nowrap;flex:none}
+
+/* 在庫の並び替え */
+.inv-sortbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+.inv-sort{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:7px 10px;font-size:14px;color:var(--ink)}
+.inv-row.mv{grid-template-columns:auto minmax(0,1fr) auto auto}
+.inv-mv{display:flex;align-items:center;gap:4px}
+.inv-mv .icon-btn{width:32px;height:32px;font-size:15px;font-weight:700}
+.inv-handle{width:34px;height:34px;display:grid;place-items:center;font-size:20px;color:var(--ink-3);cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none;border-radius:8px}
+.inv-handle:active{cursor:grabbing;background:var(--surface-2)}
+.inv-row.dragging{background:var(--surface-2);box-shadow:var(--shadow);position:relative;z-index:2;opacity:.9}
+@media (max-width:720px){
+  .inv-row.mv{grid-template-columns:auto minmax(0,1fr) auto}
+  .inv-row.mv .inv-acts{display:none}
+}
+@media (max-width:720px){
+  .tabs{gap:0;padding-left:2px;padding-right:2px}
+  .tabs button{flex:1 1 0;min-width:0;padding:6px 0;font-size:10px;letter-spacing:-.02em}
+  .tabs button span{white-space:nowrap}
+}
+.inv-filter>*,.inv-top>*{min-width:0;max-width:100%}
