@@ -203,6 +203,14 @@ function buildDay(store, date, tcRecords, orders, dayCfg, overrides, settings) {
   const startCash = cashRec ? cashRec.cash : null;
   const wages = (settings && settings.wages) || {};
   const defWage = settings && Number(settings.defaultWage) ? Number(settings.defaultWage) : 0;
+  // バックはその日その店舗で働いた人数で均等に割る（割り切れない端数は計上担当へ）
+  const n = Math.max(1, recs.length);
+  const total = {
+    normalBack: Math.round(sum.normal * BACK.normal), lateBack: Math.round(sum.late * BACK.late),
+    champagneBack: Math.round(sum.champagne * BACK.champagne), medalBack: sum.medals * BACK.medal,
+  };
+  const totalBack = total.normalBack + total.lateBack + total.champagneBack + total.medalBack;
+  const share = (k, isH) => { if (!holder) return 0; const each = Math.floor(total[k] / n); return isH ? total[k] - each * (n - 1) : each; };
   for (const r of recs) {
     const rate = Number(wages[r.staff]) || defWage;
     r.rate = rate;
@@ -214,14 +222,16 @@ function buildDay(store, date, tcRecords, orders, dayCfg, overrides, settings) {
     r.champagne = isH ? sum.champagne : null;
     r.medals = isH ? sum.medals : null;
     r.discount = isH ? sum.discount : null;
-    r.normalBack = isH ? Math.round(sum.normal * BACK.normal) : 0;
-    r.lateBack = isH ? Math.round(sum.late * BACK.late) : 0;
-    r.champagneBack = isH ? Math.round(sum.champagne * BACK.champagne) : 0;
-    r.medalBack = isH ? sum.medals * BACK.medal : 0;
+    r.normalBack = share('normalBack', isH);
+    r.lateBack = share('lateBack', isH);
+    r.champagneBack = share('champagneBack', isH);
+    r.medalBack = share('medalBack', isH);
+    r.backSplit = n;
     const back = r.normalBack + r.lateBack + r.champagneBack + r.medalBack;
     r.pay = (r.wage || 0) + back;
-    r.daily = isH ? sum.normal + sum.late + sum.champagne - back : 0;
-    r.finalCash = isH && startCash != null ? startCash + sum.normal + sum.late + sum.champagne - back : null;
+    // 日次売上・最終レジ金はバック全額（全員分）を引いた金額
+    r.daily = isH ? sum.normal + sum.late + sum.champagne - totalBack : 0;
+    r.finalCash = isH && startCash != null ? startCash + sum.normal + sum.late + sum.champagne - totalBack : null;
     if (!isH) r.cash = r.cash; // スタートレジ金は入力された行に残す
   }
   // 打刻がない日でも会計があれば売上は数える
