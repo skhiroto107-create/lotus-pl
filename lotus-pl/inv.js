@@ -93,19 +93,19 @@
       <div class="chips"><button class="chip-sel ${inv.cat ? '' : 'on'}" data-act="invcat" data-v="">すべて</button>${cats.map((c) => `<button class="chip-sel ${inv.cat === c ? 'on' : ''}" data-act="invcat" data-v="${esc(c)}">${esc(c)}</button>`).join('')}</div>
       <input type="search" class="inv-q" id="inv-q" placeholder="商品名・保管場所で検索" value="${esc(inv.q)}">
     </div>`;
-    if (inv.reorder) sortBy = 'manual';
+    if (inv.reorder && sortBy !== 'cat') sortBy = 'manual'; // カテゴリ別のときはカテゴリの中で並び替え
     const sortBar = `<div class="inv-sortbar">
       <label class="hint" for="inv-sort">並び順</label>
       <select id="inv-sort" class="inv-sort" ${inv.reorder ? 'disabled' : ''}>${SORTS.map(([k, l]) => `<option value="${k}" ${sortBy === k ? 'selected' : ''}>${l}</option>`).join('')}</select>
       <span class="spacer"></span>
-      ${inv.reorder ? '<span class="hint">≡ をドラッグ、または ↑↓ で移動</span><button class="btn sm primary" data-act="invreorder">完了</button>' : '<button class="btn sm" data-act="invreorder">並び替え</button>'}
+      ${inv.reorder ? `<span class="hint">≡ をドラッグ、または ↑↓ で移動${sortBy === 'cat' ? '（カテゴリの中で）' : ''}</span><button class="btn sm primary" data-act="invreorder">完了</button>` : '<button class="btn sm" data-act="invreorder">並び替え</button>'}
     </div>`;
     let groups;
     if (sortBy === 'cat') {
       groups = cats.filter((c) => !inv.cat || inv.cat === c).map((c) => {
         const rows = ordered(shown.filter((it) => (it.category || 'その他') === c));
         if (!rows.length) return '';
-        return `<div class="inv-g"><div class="grp-h inv-cat">${esc(c)} <span>${rows.length}</span></div>` + rows.map((it) => itemRow(it, stores)).join('') + '</div>';
+        return `<div class="inv-g sortable ${inv.reorder ? 'reorder' : ''}"><div class="grp-h inv-cat">${esc(c)} <span>${rows.length}</span></div>` + rows.map((it) => itemRow(it, stores)).join('') + '</div>';
       }).join('');
     } else {
       let rows = ordered(shown);
@@ -114,7 +114,7 @@
         const ratio = (it) => Math.min(...stores.map((s) => { const m = minOf(it, s); return m ? stock(it, s) / m : stock(it, s) + 1e3; }));
         rows = [...shown].sort((a, b) => ratio(a) - ratio(b));
       }
-      groups = `<div class="inv-g ${inv.reorder ? 'reorder' : ''}" id="inv-flat">` + rows.map((it) => itemRow(it, stores)).join('') + '</div>';
+      groups = `<div class="inv-g sortable ${inv.reorder ? 'reorder' : ''}" id="inv-flat">` + rows.map((it) => itemRow(it, stores)).join('') + '</div>';
     }
     setTimeout(applySearch, 0);
     return tiles + filters + sortBar + `<div class="card inv-list">${groups || ''}<div class="empty" id="inv-none" style="display:none">該当する商品がありません</div></div>`;
@@ -354,17 +354,20 @@
   // 画面に出ている行の順番を、全体の並び順に反映して保存（絞り込み中は、その中だけ入れ替わる）
   let saveT = null;
   function commitOrder() {
-    const vis = [...document.querySelectorAll('#inv-flat .inv-row')].map((r) => r.dataset.id);
     const full = ordered(inv.items).map((x) => x.id);
-    const slots = full.map((id, i) => (vis.includes(id) ? i : -1)).filter((i) => i >= 0);
-    slots.forEach((pos, k) => { full[pos] = vis[k]; });
+    // まとまり（全体 or カテゴリ）ごとに、その中の商品が並んでいた位置だけを入れ替える
+    document.querySelectorAll('.inv-list .inv-g.sortable').forEach((g) => {
+      const vis = [...g.querySelectorAll('.inv-row')].map((r) => r.dataset.id);
+      const slots = full.map((id, i) => (vis.includes(id) ? i : -1)).filter((i) => i >= 0);
+      slots.forEach((pos, k) => { full[pos] = vis[k]; });
+    });
     full.forEach((id, i) => { const it = inv.items.find((x) => x.id === id); if (it) it.order = i; });
     clearTimeout(saveT);
     saveT = setTimeout(async () => { try { await api('invOrder', { ids: full }, true); toast('並び順を保存しました'); } catch (e) { toast(e.message); } }, 700);
   }
   function moveItem(id, d) {
-    const row = document.querySelector(`#inv-flat .inv-row[data-id="${id}"]`); if (!row) return;
-    const sib = d < 0 ? row.previousElementSibling : row.nextElementSibling; if (!sib) return;
+    const row = document.querySelector(`.inv-list .inv-row[data-id="${id}"]`); if (!row) return;
+    const sib = d < 0 ? row.previousElementSibling : row.nextElementSibling; if (!sib || !sib.classList.contains('inv-row')) return;
     d < 0 ? sib.before(row) : sib.after(row);
     commitOrder();
   }
@@ -381,7 +384,7 @@
   document.addEventListener('pointermove', (e) => {
     if (!drag) return;
     e.preventDefault();
-    const list = document.getElementById('inv-flat'); if (!list) return;
+    const list = drag.row.closest('.inv-g'); if (!list) return; // 同じまとまり（カテゴリ）の中だけで動かす
     const rows = [...list.querySelectorAll('.inv-row')].filter((r) => r !== drag.row);
     const after = rows.find((r) => { const b = r.getBoundingClientRect(); return e.clientY < b.top + b.height / 2; });
     after ? after.before(drag.row) : list.append(drag.row);
@@ -411,7 +414,7 @@
       case 'invcountsave': saveCount(); break;
       case 'invlogdel': delLog(b.dataset.id); break;
       case 'invcopy': copyOrder(b.dataset.store); break;
-      case 'invreorder': inv.reorder = !inv.reorder; if (inv.reorder) { sortBy = 'manual'; inv.q = ''; } P.render(); break;
+      case 'invreorder': inv.reorder = !inv.reorder; if (inv.reorder) { if (sortBy !== 'cat') sortBy = 'manual'; inv.q = ''; } P.render(); break;
       case 'invmove': moveItem(b.dataset.id, Number(b.dataset.d)); break;
     }
   }
