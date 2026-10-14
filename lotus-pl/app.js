@@ -334,6 +334,7 @@
         </div>
         <dl class="kv" style="margin-top:4px">
           <dt>時間給（${r.rate ? yen(r.rate) + '/h' : '時給未設定'}・${wageEndLabel(r.store)}で停止）</dt><dd id="lv-wage">${yen(r.wage)}</dd>
+          ${r.backSplit > 1 ? `<dt class="hint" style="grid-column:1/-1">バックはこの日の${r.backSplit}人で均等に割っています</dt>` : ''}
           <dt>通常バック 10% / 開店後バック 50%</dt><dd>${yen(r.normalBack)} / ${yen(r.lateBack)}</dd>
           <dt>シャンパンバック 20% / メダル ¥50</dt><dd>${yen(r.champagneBack)} / ${yen(r.medalBack)}</dd>
           <div class="sep"></div>
@@ -864,7 +865,7 @@
         <div><button class="btn primary" data-act="savestart">保存</button></div></div></div>
       <div class="card" style="max-width:640px;margin-top:14px"><div class="card-h"><h3>バック率</h3></div><div class="card-b"><dl class="kv">
         <dt>通常売上</dt><dd>10%</dd><dt>開店時間以降売上</dt><dd>50%</dd><dt>シャンパン</dt><dd>20%</dd><dt>メダル</dt><dd>1枚 ¥50</dd>
-      </dl><p class="hint">計上担当のスタッフに付きます。率を変えるときは api/_lib.js の BACK を編集してください。</p></div></div>
+      </dl><p class="hint">その日その店舗で働いたスタッフの人数で均等に割ります（1人なら全額、2人なら半分ずつ）。率を変えるときは api/_lib.js の BACK を編集してください。</p></div></div>
       <div class="card" style="max-width:640px;margin-top:14px"><div class="card-h"><h3>データの取り込み</h3></div><div class="card-b"><p class="hint" style="margin:0">打刻はタイムカード、会計はデジタルメニューから自動で取り込みます（画面を開いたとき＋毎日16:00）。タイムカードは当日の打刻しか返さないため、このアプリを使い始めた日より前の打刻は表示されません。</p></div></div>`;
   }
   async function saveStart() {
