@@ -54,7 +54,7 @@ module.exports = {
       id: prev ? prev.id : newId('i'),
       name: str(item.name, 60), category: str(item.category, 20), unit: str(item.unit, 10) || '個',
       location: str(item.location, 40), memo: str(item.memo, 200),
-      minStock: perStore(item.minStock), stock: prev ? { ...(prev.stock || {}) } : {},
+      minStock: perStore(item.minStock), target: perStore(item.target), stock: prev ? { ...(prev.stock || {}) } : {},
       suppliers, created: prev ? prev.created : Date.now(), updated: Date.now(),
       order: prev ? prev.order : items.reduce((m, x) => Math.max(m, x.order == null ? -1 : x.order), -1) + 1,
     };
