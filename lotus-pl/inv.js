@@ -28,7 +28,12 @@
   const fmtQ = (v, unit) => `${n2(v).toLocaleString('ja-JP')}${unit ? `<small>${esc(unit)}</small>` : ''}`;
   const stock = (it, s) => n2((it.stock || {})[s]);
   const minOf = (it, s) => ((it.minStock || {})[s] == null ? null : n2(it.minStock[s]));
-  const low = (it, s) => { const m = minOf(it, s); return m != null && m > 0 && stock(it, s) <= m; };
+  // マスト在庫数（常に置いておきたい数）。未設定なら発注ライン×2
+  const mustOf = (it, s) => { const t = (it.target || {})[s]; return t != null && t > 0 ? n2(t) : null; };
+  // 発注が必要：発注ライン以下になった（発注ライン未設定ならマスト在庫数を下回った）
+  const low = (it, s) => { const m = minOf(it, s); if (m != null && m > 0) return stock(it, s) <= m; const t = mustOf(it, s); return t != null && stock(it, s) < t; };
+  const targetOf = (it, s) => { const t = (it.target || {})[s]; return t != null && t > 0 ? n2(t) : n2((minOf(it, s) || 0) * 2); };
+  const needOf = (it, s) => Math.max(1, Math.ceil(targetOf(it, s) - stock(it, s)));
   function cheapest(it) {
     const xs = (it.suppliers || []).filter((s) => s.price != null && s.price > 0);
     return xs.length ? xs.reduce((a, b) => (b.price < a.price ? b : a)) : null;
@@ -125,7 +130,7 @@
     const isLow = stores.some((s) => low(it, s));
     const st = stores.map((s) => {
       const m = minOf(it, s);
-      return `<div class="inv-st ${low(it, s) ? 'low' : ''}">${stores.length > 1 ? `<i style="background:${STORE_VAR[s]}"></i>` : ''}<b>${fmtQ(stock(it, s), it.unit)}</b>${m ? `<span>発注 ${n2(m)}</span>` : ''}</div>`;
+      return `<div class="inv-st ${low(it, s) ? 'low' : ''}">${stores.length > 1 ? `<i style="background:${STORE_VAR[s]}"></i>` : ''}<b>${fmtQ(stock(it, s), it.unit)}</b>${mustOf(it, s) != null || m ? `<span>${mustOf(it, s) != null ? `マスト ${mustOf(it, s)}` : ''}${mustOf(it, s) != null && m ? '・' : ''}${m ? `発注 ${n2(m)}` : ''}</span>` : ''}</div>`;
     }).join('');
     const mv = inv.reorder ? `<div class="inv-mv"><span class="inv-handle" data-id="${it.id}" aria-label="ドラッグで移動">≡</span><button class="icon-btn" data-act="invmove" data-id="${it.id}" data-d="-1" aria-label="上へ">↑</button><button class="icon-btn" data-act="invmove" data-id="${it.id}" data-d="1" aria-label="下へ">↓</button></div>` : '';
     return `<div class="inv-row ${inv.reorder ? 'mv' : ''}" data-id="${it.id}" data-s="${esc((it.name + ' ' + (it.location || '') + ' ' + (it.memo || '')).toLowerCase())}">
@@ -141,19 +146,20 @@
   function viewOrder(stores) {
     const blocks = stores.map((s) => {
       const rows = ordered(inv.items.filter((it) => low(it, s)));
-      const total = rows.reduce((a, it) => { const c = cheapest(it); return a + (c ? Math.max(1, minOf(it, s) - stock(it, s) + 1) * c.price : 0); }, 0);
+      const total = rows.reduce((a, it) => { const c = cheapest(it); return a + (c ? needOf(it, s) * c.price : 0); }, 0);
       const list = rows.length ? rows.map((it) => {
-        const c = cheapest(it); const need = Math.max(1, n2(minOf(it, s) - stock(it, s) + 1));
-        return `<div class="inv-row">
+        const c = cheapest(it); const need = needOf(it, s); const u = esc(it.unit || '');
+        return `<div class="inv-row inv-ord">
+          <div class="inv-need"><small>発注数</small><b>${need}</b><span>${u}</span></div>
           <div class="inv-main static"><div class="inv-nm"><b>${esc(it.name)}</b><span class="hint">${esc(it.category || '')}</span></div>
-            <div class="inv-sub">在庫 ${fmtQ(stock(it, s), it.unit)} ／ 発注ライン ${n2(minOf(it, s))} → <b>${need}${esc(it.unit || '')}</b> 以上</div>
-            <div class="inv-sub">${c ? `最安 ${link(c.url, esc(c.name))} ${yen(c.price)}　目安 <b>${yen(need * c.price)}</b>` : `<a class="linkbtn" target="_blank" rel="noopener noreferrer" href="${esc(searchUrl(it.name))}">ネットで最安を探す</a>`}</div></div>
-          <div class="inv-acts"><button class="btn sm" data-act="invbuy" data-id="${it.id}" data-store="${s}">仕入れを記録</button></div>
+            <div class="inv-flow">今 <b>${n2(stock(it, s))}${u}</b> ＋ 発注 <b class="neg">${need}${u}</b> ＝ 発注後 <b>${n2(stock(it, s) + need)}${u}</b><span class="hint">（マスト在庫 ${targetOf(it, s)}${u}${minOf(it, s) ? `・発注ライン ${n2(minOf(it, s))}${u}` : ''}）</span></div>
+            <div class="inv-sub">${c ? `最安 ${link(c.url, esc(c.name))} ${yen(c.price)} × ${need} ＝ <b>${yen(need * c.price)}</b>` : `<a class="linkbtn" target="_blank" rel="noopener noreferrer" href="${esc(searchUrl(it.name))}">ネットで最安を探す</a>`}</div></div>
+          <div class="inv-acts"><button class="btn sm" data-act="invbuy" data-id="${it.id}" data-store="${s}" data-qty="${need}">仕入れを記録</button></div>
         </div>`;
       }).join('') : '<div class="empty" style="padding:22px">発注が必要な商品はありません</div>';
       return `<div class="card" style="margin-bottom:14px"><div class="card-h"><span class="dot" style="background:${STORE_VAR[s]}"></span><h3>${s}</h3><span class="hint">${rows.length}品${total ? `・目安 ${yen(total)}` : ''}</span><span class="spacer"></span>${rows.length ? `<button class="btn sm" data-act="invcopy" data-store="${s}">リストをコピー</button>` : ''}</div>${list}</div>`;
     }).join('');
-    return `<p class="hint" style="margin:0 0 12px">在庫が発注ライン以下になった商品です。目安の数は「発注ラインを1つ上回るまで」。最安は登録した仕入れ先の値段から選んでいます。</p>` + blocks;
+    return `<p class="hint" style="margin:0 0 12px">在庫が発注ライン以下になった商品です。発注数＝マスト在庫数 − 今の在庫（マスト在庫数は商品の編集で設定。未設定なら発注ラインの2倍）。最安は登録した仕入れ先の値段から選んでいます。</p>` + blocks;
   }
 
   function viewHistory(stores) {
@@ -242,10 +248,11 @@
           <div class="fld"><label for="i-unit">単位</label><select id="i-unit">${(() => { const u = it ? it.unit : '本'; return [...new Set([...UNITS, ...(u ? [u] : [])])].map((c) => `<option value="${esc(c)}" ${c === u ? 'selected' : ''}>${esc(c)}</option>`).join(''); })()}</select></div>
           <div class="fld"><label for="i-loc">保管場所</label><input id="i-loc" value="${esc(it ? it.location || '' : '')}" placeholder="例：バックヤード棚"></div>
         </div>
-        <div class="grp-h">在庫と発注ライン</div>
-        <div class="inv-st-edit">${STORES.map((s) => `<div class="fld"><label><span class="dot" style="background:${STORE_VAR[s]}"></span> ${s} 在庫</label><input type="number" inputmode="decimal" min="0" step="0.5" data-stock="${s}" value="${it ? stock(it, s) : ''}" placeholder="0"></div>
-          <div class="fld"><label>${s} 発注ライン</label><input type="number" inputmode="decimal" min="0" step="0.5" data-min="${s}" value="${it && minOf(it, s) != null ? minOf(it, s) : ''}" placeholder="この数以下で要発注"></div>`).join('')}</div>
-        ${it ? '<div class="hint" style="margin-top:-6px">在庫数を直接変えると「在庫修正」として記録されます。ふだんは「仕入れ」「棚卸し」から更新してください。</div>' : ''}
+        <div class="grp-h">マスト在庫数と発注ライン</div>
+        <div class="inv-st-edit">${STORES.map((s) => `<div class="fld"><label><span class="dot" style="background:${STORE_VAR[s]}"></span> ${s} マスト在庫数</label><input type="number" inputmode="decimal" min="0" step="0.5" data-target="${s}" value="${it && mustOf(it, s) != null ? mustOf(it, s) : ''}" placeholder="例：6"></div>
+          <div class="fld"><label>発注ライン</label><input type="number" inputmode="decimal" min="0" step="0.5" data-min="${s}" value="${it && minOf(it, s) != null ? minOf(it, s) : ''}" placeholder="空欄可"></div>
+          ${it ? `<div class="fld"><label>今の在庫</label><div class="inv-now">${fmtQ(stock(it, s), it.unit)}</div></div>` : `<div class="fld"><label>今の在庫</label><input type="number" inputmode="decimal" min="0" step="0.5" data-stock="${s}" value="" placeholder="0"></div>`}`).join('')}</div>
+        <div class="hint" style="margin-top:-6px">在庫が「発注ライン」以下（未設定ならマスト在庫数を下回る）と発注リストに出ます。発注数は「マスト在庫数 − 今の在庫」です。${it ? '今の在庫は「仕入れ」「棚卸し」で更新されます。' : ''}</div>
         <div class="grp-h" style="display:flex;align-items:center;gap:8px">仕入れ先と値段<span class="spacer"></span><a class="linkbtn" id="i-search" target="_blank" rel="noopener noreferrer" href="${esc(searchUrl(it ? it.name : ''))}">ネットで最安を探す</a></div>
         <div id="i-sups">${supRows()}</div>
         <div><button class="btn sm" data-act="invsupadd">＋ 仕入れ先を追加</button></div>
@@ -262,8 +269,9 @@
     readSup();
     const minStock = {}, stockV = {};
     document.querySelectorAll('[data-min]').forEach((el) => { if (el.value !== '') minStock[el.dataset.min] = Number(el.value); });
+    const target = {}; document.querySelectorAll('[data-target]').forEach((el) => { if (el.value !== '') target[el.dataset.target] = Number(el.value); });
     document.querySelectorAll('[data-stock]').forEach((el) => { if (el.value !== '') stockV[el.dataset.stock] = Number(el.value); });
-    const item = { id: id || undefined, name: $('#i-name').value, category: $('#i-cat').value, unit: $('#i-unit').value, location: $('#i-loc').value, memo: $('#i-memo').value, minStock, stock: stockV, suppliers: draftSup.map((x) => ({ ...x, price: x.price === '' || x.price == null ? null : Number(x.price) })) };
+    const item = { id: id || undefined, name: $('#i-name').value, category: $('#i-cat').value, unit: $('#i-unit').value, location: $('#i-loc').value, memo: $('#i-memo').value, minStock, target, stock: stockV, suppliers: draftSup.map((x) => ({ ...x, price: x.price === '' || x.price == null ? null : Number(x.price) })) };
     if (!item.name.trim()) { toast('商品名を入れてください'); return; }
     try { await api('invSave', { item, date: todayStr() }, true); closeSheet(); toast('保存しました'); await refresh(); }
     catch (e) { toast(e.message); }
@@ -330,7 +338,7 @@
   }
   async function copyOrder(store) {
     const rows = inv.items.filter((it) => low(it, store)).map((it) => {
-      const c = cheapest(it); const need = Math.max(1, n2(minOf(it, store) - stock(it, store) + 1));
+      const c = cheapest(it); const need = needOf(it, store);
       return `・${it.name} ${need}${it.unit || ''}${c ? `（${c.name} ${c.price}円${c.url ? ' ' + c.url : ''}）` : ''}`;
     });
     const text = `【${store} 発注リスト ${dayLabel(todayStr())}】\n` + rows.join('\n');
@@ -407,7 +415,7 @@
       case 'invdel': delItem(b.dataset.id); break;
       case 'invsupadd': readSup(); draftSup.push({ name: '', price: null, url: '' }); $('#i-sups').innerHTML = supRows(); break;
       case 'invsupdel': readSup(); draftSup.splice(Number(b.dataset.i), 1); $('#i-sups').innerHTML = supRows(); break;
-      case 'invbuy': openBuy(b.dataset.id, b.dataset.store); break;
+      case 'invbuy': openBuy(b.dataset.id, b.dataset.store); if (b.dataset.qty && $('#b-qty')) { $('#b-qty').value = b.dataset.qty; $('#b-qty').dispatchEvent(new Event('input')); } break;
       case 'invbuystore': $('#sheet').dataset.store = b.dataset.v; b.parentElement.querySelectorAll('.chip-sel').forEach((x) => x.classList.toggle('on', x === b)); break;
       case 'invbuysave': saveBuy(b.dataset.id); break;
       case 'invcntstore': inv.countStore = b.dataset.v; P.render(); break;
