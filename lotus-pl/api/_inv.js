@@ -51,6 +51,7 @@ module.exports = {
       .map((s) => ({ id: s.id || newId('s'), name: str(s.name, 40), price: s.price === '' || s.price == null ? null : yenInt(s.price), url: cleanUrl(s.url), note: str(s.note, 60), updated: s.updated || '' }))
       .filter((s) => s.name || s.url);
     const next = {
+      ...(prev || {}), // 最終仕入れ日・前回の棚卸し日などは残す
       id: prev ? prev.id : newId('i'),
       name: str(item.name, 60), category: str(item.category, 20), unit: str(item.unit, 10) || '個',
       location: str(item.location, 40), memo: str(item.memo, 200),
