@@ -432,3 +432,12 @@ table.tbl{width:100%;border-collapse:collapse;font-size:13px;min-width:720px}
 }
 .inv-now{padding:10px 2px;font-size:17px;font-weight:700;font-variant-numeric:tabular-nums}
 .inv-now small{font-size:11px;color:var(--ink-3);margin-left:2px}
+
+/* 個人ごとの計上 */
+.per-tg{display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;flex-wrap:wrap}
+.per-tg input{width:18px;height:18px}
+.act-store .perbox{display:none;flex-direction:column;gap:10px}
+.act-store.per .perbox{display:flex}
+.act-store.per .tot{display:none}
+.per-p{border:1px dashed var(--line);border-radius:10px;padding:8px 10px}
+.per-p>b{display:block;font-size:13px;margin-bottom:6px}
