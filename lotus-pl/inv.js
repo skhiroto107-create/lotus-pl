@@ -158,16 +158,24 @@
     const costOf = (it) => { const c = cheapest(it); return c ? qtyOf(it) * c.price : 0; };
     const total = rows.reduce((a, it) => a + costOf(it), 0);
     const multi = stores.length > 1;
+    // 仕入れ金額（最安の仕入れ先の値段 × 発注数）
+    const amtIn = (it, s) => { const c = cheapest(it); return c ? needIn(it, s) * c.price : 0; };
+    const storeAmt = stores.map((s) => rows.reduce((a, it) => a + amtIn(it, s), 0));
+    const noPrice = rows.filter((it) => !cheapest(it)).length;
+    const tiles = rows.length ? `<div class="tiles">
+      ${stores.map((s, k) => `<div class="tile"><div class="k"><span class="dot" style="background:${STORE_VAR[s]};display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:4px"></span>${s} の仕入れ金額</div><div class="v">${yen(storeAmt[k])}</div><div class="s">${rows.filter((it) => needIn(it, s)).length}品</div></div>`).join('')}
+      ${multi ? `<div class="tile hero"><div class="k">仕入れ金額 合計</div><div class="v">${yen(total)}</div><div class="s">${rows.length}品${noPrice ? `・値段未登録 ${noPrice}品（金額に入っていません）` : ''}</div></div>` : ''}
+    </div>` : '';
     const head = `<div class="ord-head"><span></span>${stores.map((s) => `<span><i class="dot" style="background:${STORE_VAR[s]}"></i>${s.replace('店', '')}</span>`).join('')}${multi ? '<span>合計</span>' : ''}</div>`;
     const row = (it) => {
       const c = cheapest(it); const u = esc(it.unit || ''); const sum = qtyOf(it);
       const cell = (s) => { const q = needIn(it, s); return q
-        ? `<button class="ord-q" data-act="invbuy" data-id="${it.id}" data-store="${s}" data-qty="${q}" title="${s}：今 ${n2(stock(it, s))}${u}・マスト ${targetOf(it, s)}${u}（押すと仕入れを記録）"><b>${q}</b><small>${u}</small><em>今${n2(stock(it, s))}/${targetOf(it, s)}</em></button>`
+        ? `<button class="ord-q" data-act="invbuy" data-id="${it.id}" data-store="${s}" data-qty="${q}" title="${s}：今 ${n2(stock(it, s))}${u}・マスト ${targetOf(it, s)}${u}（押すと仕入れを記録）"><b>${q}</b><small>${u}</small><em>今${n2(stock(it, s))}/${targetOf(it, s)}</em>${c ? `<i class="amt">${yen(q * c.price)}</i>` : ''}</button>`
         : '<span class="ord-q none">—</span>'; };
       return `<div class="ord-row">
         <div class="ord-nm"><b>${esc(it.name)}</b><div class="inv-sub">${c ? `最安 ${link(c.url, esc(c.name))} ${yen(c.price)} × ${sum} ＝ <b>${yen(sum * c.price)}</b>` : `<a class="linkbtn" target="_blank" rel="noopener noreferrer" href="${esc(searchUrl(it.name))}">ネットで最安を探す</a>`}</div></div>
         ${stores.map(cell).join('')}
-        ${multi ? `<div class="ord-q sum"><b>${sum}</b><small>${u}</small></div>` : ''}
+        ${multi ? `<div class="ord-q sum"><b>${sum}</b><small>${u}</small>${c ? `<i class="amt">${yen(sum * c.price)}</i>` : ''}</div>` : ''}
       </div>`;
     };
     // カテゴリごとに分けて表示
@@ -175,8 +183,8 @@
       const sub = xs.reduce((a, it) => a + costOf(it), 0);
       return `<div class="grp-h inv-cat">${esc(cat)} <span>${xs.length}品${sub ? `・${yen(sub)}` : ''}</span></div>` + xs.map(row).join('');
     }).join('') : '<div class="empty" style="padding:22px">発注が必要な商品はありません</div>';
-    return `<p class="hint" style="margin:0 0 12px">発注数＝マスト在庫数 − 今の在庫（発注ライン以下になった店舗だけ）。数字を押すと、その店舗の仕入れを記録できます。小さい数字は「今の在庫／マスト在庫数」。</p>
-      <div class="card ord ${multi ? '' : 'one'}"><div class="card-h"><h3>発注リスト</h3><span class="hint">${rows.length}品${total ? `・目安 ${yen(total)}` : ''}</span><span class="spacer"></span>${rows.length ? '<button class="btn sm" data-act="invcopy">リストをコピー</button>' : ''}</div>
+    return `<p class="hint" style="margin:0 0 12px">発注数＝マスト在庫数 − 今の在庫（発注ライン以下になった店舗だけ）。数字を押すと、その店舗の仕入れを記録できます。小さい数字は「今の在庫／マスト在庫数」と仕入れ金額（最安の値段 × 発注数）。</p>
+      ${tiles}<div class="card ord ${multi ? '' : 'one'}"><div class="card-h"><h3>発注リスト</h3><span class="hint">${rows.length}品${total ? `・目安 ${yen(total)}` : ''}</span><span class="spacer"></span>${rows.length ? '<button class="btn sm" data-act="invcopy">リストをコピー</button>' : ''}</div>
       ${rows.length ? head : ''}${list}</div>`;
   }
 
@@ -362,9 +370,11 @@
       const per = stores.map((s) => (low(it, s) ? needOf(it, s) : 0));
       const sum = per.reduce((a, x) => a + x, 0);
       const parts = stores.length > 1 ? stores.map((s, k) => `${s.replace('店', '')}${per[k]}`).join(' ') + ` 計${sum}${u}` : `${sum}${u}`;
-      return `・${it.name} ${parts}${c ? `（${c.name} ${c.price}円${c.url ? ' ' + c.url : ''}）` : ''}`;
+      return `・${it.name} ${parts}${c ? ` ¥${(sum * c.price).toLocaleString('ja-JP')}（${c.name} ${c.price}円${c.url ? ' ' + c.url : ''}）` : ''}`;
     }).join('\n'));
-    const text = `【発注リスト ${dayLabel(todayStr())}】\n` + rows.join('\n\n');
+    const amt = (s) => items.reduce((a, it) => { const c = cheapest(it); return a + (c && low(it, s) ? needOf(it, s) * c.price : 0); }, 0);
+    const foot = '\n\n【仕入れ金額】' + (stores.length > 1 ? stores.map((s) => ` ${s.replace('店', '')} ¥${amt(s).toLocaleString('ja-JP')}`).join('') + ' ／' : '') + ` 合計 ¥${stores.reduce((a, s) => a + amt(s), 0).toLocaleString('ja-JP')}`;
+    const text = `【発注リスト ${dayLabel(todayStr())}】\n` + rows.join('\n\n') + foot;
     try { await navigator.clipboard.writeText(text); toast('コピーしました'); }
     catch (e) { window.prompt('コピーしてください', text); }
   }
