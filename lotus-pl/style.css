@@ -474,3 +474,8 @@ a.linkbtn[href]:active{opacity:.6}
 .yen-in{position:relative;display:block;min-width:0}
 .yen-in::before{content:"¥";position:absolute;left:11px;top:50%;transform:translateY(-50%);font-weight:700;color:var(--ink-2);pointer-events:none;font-size:15px}
 .yen-in input{padding-left:26px!important;width:100%}
+
+/* 発注リストの仕入れ金額 */
+.ord-q .amt{font-style:normal;font-size:10.5px;font-weight:700;color:var(--ink);margin-top:2px;font-variant-numeric:tabular-nums;white-space:nowrap}
+.ord-q.sum .amt{color:var(--ink)}
+@media (max-width:720px){ .ord-q .amt{font-size:9.5px;letter-spacing:-.03em} }
