@@ -441,3 +441,24 @@ table.tbl{width:100%;border-collapse:collapse;font-size:13px;min-width:720px}
 .act-store.per .tot{display:none}
 .per-p{border:1px dashed var(--line);border-radius:10px;padding:8px 10px}
 .per-p>b{display:block;font-size:13px;margin-bottom:6px}
+
+/* 発注リスト（店舗を横に並べる） */
+.card.ord.one .ord-head,.card.ord.one .ord-row{grid-template-columns:minmax(0,1fr) 72px}
+.ord-head,.ord-row{display:grid;grid-template-columns:minmax(0,1fr) repeat(3,72px);gap:8px;align-items:center;padding:8px 16px}
+.ord-head{font-size:11px;font-weight:700;color:var(--ink-3);border-bottom:1px solid var(--line-2);position:sticky;top:0;background:var(--surface);z-index:1}
+.ord-head span{text-align:center;display:flex;align-items:center;justify-content:center;gap:4px}
+.ord-head .dot{width:7px;height:7px;border-radius:50%;display:inline-block}
+.ord-row{border-bottom:1px solid var(--line-2)}
+.ord-nm b{font-size:14px}
+.ord-q{display:flex;flex-direction:column;align-items:center;justify-content:center;border:0;border-radius:10px;padding:5px 2px;background:var(--bad-bg);color:var(--bad);line-height:1.1;min-height:46px;font:inherit;cursor:pointer}
+.ord-q b{font-size:20px;font-variant-numeric:tabular-nums}
+.ord-q small{font-size:10px;font-weight:700}
+.ord-q em{font-style:normal;font-size:9.5px;color:var(--ink-3);margin-top:1px}
+.ord-q.none{background:none;color:var(--ink-3);cursor:default;font-size:15px}
+.ord-q.sum{background:var(--surface-3);color:var(--ink);cursor:default}
+@media (max-width:720px){
+  .ord-head,.ord-row{grid-template-columns:minmax(0,1fr) repeat(3,54px);gap:5px;padding:8px 12px}
+  .ord-q b{font-size:17px}
+}
+.ord-head span{white-space:nowrap}
+@media (max-width:720px){ .ord-head{font-size:10px;letter-spacing:-.03em} .ord-head .dot{display:none} }
