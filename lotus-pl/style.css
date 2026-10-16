@@ -462,3 +462,10 @@ table.tbl{width:100%;border-collapse:collapse;font-size:13px;min-width:720px}
 }
 .ord-head span{white-space:nowrap}
 @media (max-width:720px){ .ord-head{font-size:10px;letter-spacing:-.03em} .ord-head .dot{display:none} }
+
+/* 仕入れ先などの外部リンクは青く */
+:root{--link:#1f6feb}
+@media (prefers-color-scheme:dark){:root{--link:#6aa8ff}}
+a.linkbtn[href]{color:var(--link);font-weight:700;font-size:inherit;text-decoration:underline;text-decoration-color:color-mix(in srgb,var(--link) 45%,transparent);display:inline-flex;align-items:center;gap:2px;padding:2px 0}
+a.linkbtn[href]::after{content:"↗";font-size:.85em;text-decoration:none}
+a.linkbtn[href]:active{opacity:.6}
