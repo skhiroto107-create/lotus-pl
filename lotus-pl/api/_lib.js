@@ -211,6 +211,18 @@ function buildDay(store, date, tcRecords, orders, dayCfg, overrides, settings) {
   };
   const totalBack = total.normalBack + total.lateBack + total.champagneBack + total.medalBack;
   const share = (k, isH) => { if (!holder) return 0; const each = Math.floor(total[k] / n); return isH ? total[k] - each * (n - 1) : each; };
+  // 個人ごとの計上（シフトのカレンダーで人ごとに入力した日）：バックは本人の売上から
+  const perOrder = valid.find((o) => o.per && Object.keys(o.per).length);
+  const Z = { normal: 0, late: 0, champagne: 0, medals: 0, discount: 0, guests: 0 };
+  const personal = {};
+  if (perOrder && holder) {
+    for (const [name, v] of Object.entries(perOrder.per)) {
+      const who = recs.some((r) => r.staff === name) ? name : holder.staff; // 出勤していない人の分は計上担当へ
+      const p = (personal[who] = personal[who] || { ...Z });
+      for (const k in Z) p[k] += Number(v[k]) || 0;
+    }
+  }
+  let paidBack = 0;
   for (const r of recs) {
     const rate = Number(wages[r.staff]) || defWage;
     r.rate = rate;
@@ -222,17 +234,33 @@ function buildDay(store, date, tcRecords, orders, dayCfg, overrides, settings) {
     r.champagne = isH ? sum.champagne : null;
     r.medals = isH ? sum.medals : null;
     r.discount = isH ? sum.discount : null;
-    r.normalBack = share('normalBack', isH);
-    r.lateBack = share('lateBack', isH);
-    r.champagneBack = share('champagneBack', isH);
-    r.medalBack = share('medalBack', isH);
-    r.backSplit = n;
+    if (perOrder && holder) {
+      const p = personal[r.staff] || { ...Z };
+      r.personal = true;
+      r.normal = p.normal; r.late = p.late; r.champagne = p.champagne; r.medals = p.medals; r.discount = p.discount; r.guests = p.guests;
+      r.normalBack = Math.round(p.normal * BACK.normal);
+      r.lateBack = Math.round(p.late * BACK.late);
+      r.champagneBack = Math.round(p.champagne * BACK.champagne);
+      r.medalBack = p.medals * BACK.medal;
+      r.backSplit = 1;
+    } else {
+      r.normalBack = share('normalBack', isH);
+      r.lateBack = share('lateBack', isH);
+      r.champagneBack = share('champagneBack', isH);
+      r.medalBack = share('medalBack', isH);
+      r.backSplit = n;
+    }
     const back = r.normalBack + r.lateBack + r.champagneBack + r.medalBack;
+    paidBack += back;
     r.pay = (r.wage || 0) + back;
     // 日次売上・最終レジ金はバック全額（全員分）を引いた金額
-    r.daily = isH ? sum.normal + sum.late + sum.champagne - totalBack : 0;
-    r.finalCash = isH && startCash != null ? startCash + sum.normal + sum.late + sum.champagne - totalBack : null;
     if (!isH) r.cash = r.cash; // スタートレジ金は入力された行に残す
+  }
+  // 日次売上・最終レジ金は、実際に付いたバック全額を引いた金額（計上担当の行に載せる）
+  const backAll = perOrder && holder ? paidBack : totalBack;
+  for (const r of recs) {
+    r.daily = r.holder ? sum.normal + sum.late + sum.champagne - backAll : 0;
+    r.finalCash = r.holder && startCash != null ? startCash + sum.normal + sum.late + sum.champagne - backAll : null;
   }
   // 打刻がない日でも会計があれば売上は数える
   const unassigned = !holder && valid.length ? { ...sum, daily: sum.normal + sum.late + sum.champagne } : null;
