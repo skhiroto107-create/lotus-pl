@@ -156,6 +156,17 @@
     const rank = (c) => (CATS.indexOf(c) < 0 ? 99 : CATS.indexOf(c));
     return [...m.entries()].sort((a, b) => rank(a[0]) - rank(b[0]));
   }
+  // 発注リストのまとめ方：cat＝カテゴリ別／sup＝仕入れ先別（最安の仕入れ先ごと）
+  const LSG = 'lotus_inv_ordgrp';
+  let ordGrp = 'cat';
+  try { ordGrp = localStorage.getItem(LSG) === 'sup' ? 'sup' : 'cat'; } catch (e) {}
+  const NOSUP = '仕入れ先未登録';
+  function supGroups(items) {
+    const m = new Map();
+    for (const it of ordered(items)) { const c = cheapest(it) || (it.suppliers || []).find((x) => x.name); const k = c ? c.name || NOSUP : NOSUP; if (!m.has(k)) m.set(k, []); m.get(k).push(it); }
+    return [...m.entries()].sort((a, b) => (a[0] === NOSUP) - (b[0] === NOSUP) || b[1].length - a[1].length || a[0].localeCompare(b[0], 'ja'));
+  }
+  const ordGroups = (items) => (ordGrp === 'sup' ? supGroups(items) : catGroups(items));
   function viewOrder(stores) {
     // 店舗ごとの発注数（その店舗で発注が必要なときだけ）
     const needIn = ordQ;
@@ -187,12 +198,12 @@
       </div>`;
     };
     // カテゴリごとに分けて表示
-    const list = rows.length ? catGroups(rows).map(([cat, xs]) => {
+    const list = rows.length ? ordGroups(rows).map(([cat, xs]) => {
       const sub = xs.reduce((a, it) => a + costOf(it), 0);
       return `<div class="grp-h inv-cat">${esc(cat)} <span>${xs.length}品${sub ? `・${yen(sub)}` : ''}</span></div>` + xs.map(row).join('');
     }).join('') : '<div class="empty" style="padding:22px">発注が必要な商品はありません</div>';
     return `<p class="hint" style="margin:0 0 12px">発注ライン以下になった商品が並びます。発注数は自動では入らないので、「入力」や数字を押して入れてください（その店舗の仕入れ記録もできます。仕入れを記録すると発注数は空に戻ります）。小さい数字は「今の在庫／マスト在庫数」と仕入れ金額（最安の値段 × 発注数）。</p>
-      ${tiles}<div class="card ord ${multi ? '' : 'one'}"><div class="card-h"><h3>発注リスト</h3><span class="hint">${rows.length}品${total ? `・目安 ${yen(total)}` : ''}</span><span class="spacer"></span>${edited ? '<button class="btn sm" data-act="invqtyreset">発注数をクリア</button>' : ''}${edited ? '<button class="btn sm" data-act="invcopy">リストをコピー</button>' : ''}</div>
+      ${tiles}<div class="card ord ${multi ? '' : 'one'}"><div class="card-h"><h3>発注リスト</h3><div class="ord-grp" role="tablist">${[['cat', 'カテゴリ別'], ['sup', '仕入れ先別']].map(([k, l]) => `<button class="${ordGrp === k ? 'on' : ''}" data-act="invordgrp" data-v="${k}">${l}</button>`).join('')}</div><span class="hint">${rows.length}品${total ? `・目安 ${yen(total)}` : ''}</span><span class="spacer"></span>${edited ? '<button class="btn sm" data-act="invqtyreset">発注数をクリア</button>' : ''}${edited ? '<button class="btn sm" data-act="invcopy">リストをコピー</button>' : ''}</div>
       ${rows.length ? head : ''}${list}</div>`;
   }
 
@@ -415,7 +426,7 @@
     const stores = storesInView();
     const items = ordered(inv.items.filter((it) => stores.some((s) => ordQ(it, s) > 0)));
     if (!items.length) { toast('発注数を入れてください'); return; }
-    const rows = catGroups(items).map(([cat, xs]) => `■${cat}\n` + xs.map((it) => {
+    const rows = ordGroups(items).map(([cat, xs]) => `■${cat}\n` + xs.map((it) => {
       const c = cheapest(it); const u = it.unit || '';
       const per = stores.map((s) => ordQ(it, s));
       const sum = n2(per.reduce((a, x) => a + x, 0));
@@ -505,6 +516,7 @@
       case 'invcountsave': saveCount(); break;
       case 'invlogdel': delLog(b.dataset.id); break;
       case 'invcopy': copyOrder(); break;
+      case 'invordgrp': ordGrp = b.dataset.v === 'sup' ? 'sup' : 'cat'; try { localStorage.setItem(LSG, ordGrp); } catch (e) {} P.render(); break;
       case 'invqty': openQty(b.dataset.id, b.dataset.store); break;
       case 'invqtystep': { const i = $('#q-qty'); i.value = n2(Math.max(0, (Number(i.value) || 0) + Number(b.dataset.d))); i.dispatchEvent(new Event('input')); break; }
       case 'invqtysave': { const v = Number($('#q-qty').value) || 0; saveQty(b.dataset.id, b.dataset.store, v > 0 ? v : null); break; }
