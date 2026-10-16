@@ -185,10 +185,10 @@ function buildDay(store, date, tcRecords, orders, dayCfg, overrides, settings) {
     let hours = 'hours' in ov && ov.hours != null ? ov.hours
       : timeEdited ? diffHours(inI, outI)
       : r.hours != null ? r.hours : diffHours(inI, outI);
-    // 時間給の停止時刻（藤井寺 4:00・恵我之荘 3:00）を過ぎた分は数えない（稼働時間を手入力した場合はそのまま）
+    // 時間給の停止時刻（藤井寺 4:00・恵我之荘 3:00）を過ぎた分は数えない（稼働時間を手入力した場合も同じ）
     let capped = false;
     const endAt = WAGE_END[store] ? `${addDays(date, 1)}T${WAGE_END[store]}:00+09:00` : null;
-    if (!('hours' in ov && ov.hours != null) && endAt && inI && outI && new Date(outI) > new Date(endAt)) {
+    if (endAt && inI && outI && new Date(outI) > new Date(endAt)) {
       const max = new Date(inI) >= new Date(endAt) ? 0 : diffHours(inI, endAt);
       if (hours == null || hours > max) { hours = max; capped = true; }
     }
