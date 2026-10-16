@@ -469,3 +469,8 @@ table.tbl{width:100%;border-collapse:collapse;font-size:13px;min-width:720px}
 a.linkbtn[href]{color:var(--link);font-weight:700;font-size:inherit;text-decoration:underline;text-decoration-color:color-mix(in srgb,var(--link) 45%,transparent);display:inline-flex;align-items:center;gap:2px;padding:2px 0}
 a.linkbtn[href]::after{content:"↗";font-size:.85em;text-decoration:none}
 a.linkbtn[href]:active{opacity:.6}
+
+/* 値段の入力欄は先頭に ¥ を表示 */
+.yen-in{position:relative;display:block;min-width:0}
+.yen-in::before{content:"¥";position:absolute;left:11px;top:50%;transform:translateY(-50%);font-weight:700;color:var(--ink-2);pointer-events:none;font-size:15px}
+.yen-in input{padding-left:26px!important;width:100%}
