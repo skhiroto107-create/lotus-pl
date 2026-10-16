@@ -161,9 +161,23 @@
   let ordGrp = 'cat';
   try { ordGrp = localStorage.getItem(LSG) === 'sup' ? 'sup' : 'cat'; } catch (e) {}
   const NOSUP = '仕入れ先未登録';
+  // リンクのドメインからネットのサイト名を判定（リンクがなければ仕入れ先の名前）
+  const SITES = [[/(^|\.)amazon\./, 'Amazon'], [/(^|\.)amzn\./, 'Amazon'], [/(^|\.)rakuten\./, '楽天市場'], [/shopping\.yahoo|paypaymall|paypay-mall|(^|\.)yahoo\./, 'Yahoo!ショッピング'],
+    [/biccamera/, 'ビックカメラ'], [/yodobashi/, 'ヨドバシ'], [/askul/, 'アスクル'], [/lohaco/, 'LOHACO'], [/monotaro/, 'モノタロウ'], [/kakuyasu/, 'カクヤス'], [/costco/, 'コストコ'],
+    [/donki|donki-ec|majica/, 'ドン・キホーテ'], [/gyomusuper|gyomu-super/, '業務スーパー'], [/mercari/, 'メルカリ'], [/aeon/, 'イオン'], [/lohaco/, 'LOHACO'], [/qoo10/, 'Qoo10'], [/au-pay|wowma/, 'au PAY マーケット'], [/(^|\.)google\./, 'Google検索（サイト不明）']];
+  function siteOf(url) {
+    let h = ''; try { h = new URL(url).hostname.toLowerCase(); } catch (e) { return ''; }
+    const hit = SITES.find(([re]) => re.test(h));
+    return hit ? hit[1] : h.replace(/^www\./, '');
+  }
+  function supKey(it) {
+    const c = cheapest(it) || (it.suppliers || []).find((x) => x.name || x.url);
+    if (!c) return NOSUP;
+    return (c.url && siteOf(c.url)) || c.name || NOSUP;
+  }
   function supGroups(items) {
     const m = new Map();
-    for (const it of ordered(items)) { const c = cheapest(it) || (it.suppliers || []).find((x) => x.name); const k = c ? c.name || NOSUP : NOSUP; if (!m.has(k)) m.set(k, []); m.get(k).push(it); }
+    for (const it of ordered(items)) { const k = supKey(it); if (!m.has(k)) m.set(k, []); m.get(k).push(it); }
     return [...m.entries()].sort((a, b) => (a[0] === NOSUP) - (b[0] === NOSUP) || b[1].length - a[1].length || a[0].localeCompare(b[0], 'ja'));
   }
   const ordGroups = (items) => (ordGrp === 'sup' ? supGroups(items) : catGroups(items));
@@ -192,7 +206,7 @@
         : lw ? `<button class="ord-q none need" data-act="invqty" data-id="${it.id}" data-store="${s}" title="${tip}"><b>入力</b><em>今${n2(stock(it, s))}/${targetOf(it, s)}</em></button>`
         : `<button class="ord-q none" data-act="invqty" data-id="${it.id}" data-store="${s}" title="${tip}">—</button>`; };
       return `<div class="ord-row">
-        <div class="ord-nm"><b>${esc(it.name)}</b><div class="inv-sub">${c ? `最安 ${link(c.url, esc(c.name))} ${yen(c.price)}${sum ? ` × ${n2(sum)} ＝ <b>${yen(sum * c.price)}</b>` : ''}` : `<a class="linkbtn" target="_blank" rel="noopener noreferrer" href="${esc(searchUrl(it.name))}">ネットで最安を探す</a>`}</div></div>
+        <div class="ord-nm"><b>${esc(it.name)}</b><div class="inv-sub">${c ? `最安 ${c.url && siteOf(c.url) ? `<span class="site-tag">${esc(siteOf(c.url))}</span>` : ''}${link(c.url, esc(c.name))} ${yen(c.price)}${sum ? ` × ${n2(sum)} ＝ <b>${yen(sum * c.price)}</b>` : ''}` : `<a class="linkbtn" target="_blank" rel="noopener noreferrer" href="${esc(searchUrl(it.name))}">ネットで最安を探す</a>`}</div></div>
         ${stores.map(cell).join('')}
         ${multi ? (sum ? `<div class="ord-q sum"><b>${n2(sum)}</b><small>${u}</small>${c ? `<i class="amt">${yen(sum * c.price)}</i>` : ''}</div>` : '<span class="ord-q none" style="border:0">—</span>') : ''}
       </div>`;
