@@ -11,6 +11,7 @@
   const DEFAULT_START = { '藤井寺店': '22:00', '恵我之荘店': '21:00' }; // シフト予定の開始時刻の初期値
   const DEFAULT_END = { '藤井寺店': '03:00', '恵我之荘店': '02:00' }; // 退勤時刻の初期値
   const DEFAULT_STAFF = 'ひろと'; // 出勤を追加するときのスタッフの初期値
+  const MS_FIELDS = [['normal', '通常売上'], ['late', '開店後売上'], ['champagne', 'シャンパン'], ['guests', '客数'], ['medals', 'メダル枚数'], ['discount', 'スタッフ割引']];
   const WAGE_END = { '藤井寺店': '04:00', '恵我之荘店': '03:00' }; // 時間給の停止時刻（営業日の翌朝）。api/_lib.js と同じ
   const wageEndLabel = (st) => (WAGE_END[st] ? String(Number(WAGE_END[st].slice(0, 2))) + ':' + WAGE_END[st].slice(3) : '');
   const BUSINESS_CUTOFF_HOUR = 10; // タイムカードに繋がらないときだけ使う予備の切替時刻(JST)
@@ -277,7 +278,7 @@
       if (!r.in) tm = '<span class="badge warn">出勤未打刻</span>';
       else tm = `<span class="times">${hm(r.in)} – ${r.out ? hm(r.out) : ''}</span>${r.out ? '' : ' <span class="badge warn">退勤未打刻</span>'}${r.capped ? ` <span class="badge mute" title="${wageEndLabel(r.store)}以降は時間給なし">${wageEndLabel(r.store)}で時給停止</span>` : ''}`;
       return `<button class="srow" data-act="edit" data-id="${r.id}">
-        <div class="c-nm nm"><span>${esc(r.staff || '（未選択）')}</span>${r.holder ? '<span class="badge ok">計上担当</span>' : ''}${r.manual ? '<span class="badge mute">手入力</span>' : ''}${r.edited ? '<span class="badge mute">修正済</span>' : ''}${planned ? '' : '<span class="badge mute">予定外</span>'}</div>
+        <div class="c-nm nm"><span>${esc(r.staff || '（未選択）')}</span>${r.personal ? `<span class="badge mute" title="個人の計上">通常${yen(r.normal)}${r.late ? '・開店後' + yen(r.late) : ''}${r.champagne ? '・シャンパン' + yen(r.champagne) : ''}・${nz(r.guests)}人</span>` : ''}${r.holder ? '<span class="badge ok">計上担当</span>' : ''}${r.manual ? '<span class="badge mute">手入力</span>' : ''}${r.edited ? '<span class="badge mute">修正済</span>' : ''}${planned ? '' : '<span class="badge mute">予定外</span>'}</div>
         <div class="c-tm">${tm}</div>
         <div class="c-h r">${hrs(r.hours)}</div>
         <div class="c-wage r">${r.rate ? yen(r.wage) : '<span class="badge warn">時給未設定</span>'}</div>
@@ -334,7 +335,7 @@
         </div>
         <dl class="kv" style="margin-top:4px">
           <dt>時間給（${r.rate ? yen(r.rate) + '/h' : '時給未設定'}・${wageEndLabel(r.store)}で停止）</dt><dd id="lv-wage">${yen(r.wage)}</dd>
-          ${r.backSplit > 1 ? `<dt class="hint" style="grid-column:1/-1">バックはこの日の${r.backSplit}人で均等に割っています</dt>` : ''}
+          ${r.personal ? `<dt class="hint" style="grid-column:1/-1">個人の計上：通常 ${yen(r.normal)}・開店後 ${yen(r.late)}・シャンパン ${yen(r.champagne)}・メダル ${nz(r.medals)}枚・${nz(r.guests)}人（バックは本人の売上から）</dt>` : r.backSplit > 1 ? `<dt class="hint" style="grid-column:1/-1">バックはこの日の${r.backSplit}人で均等に割っています</dt>` : ''}
           <dt>通常バック 10% / 開店後バック 50%</dt><dd>${yen(r.normalBack)} / ${yen(r.lateBack)}</dd>
           <dt>シャンパンバック 20% / メダル ¥50</dt><dd>${yen(r.champagneBack)} / ${yen(r.medalBack)}</dd>
           <div class="sep"></div>
@@ -509,7 +510,8 @@
       const ms = allO.find((o) => o.store === st && o.date === ds && o.manual) || {};
       // 手入力がなければデジタルメニューの合計を初期値に（保存するとこの値で置き換え）
       const v = (k) => (ms.id ? nz(ms[k]) : nz(menuSum[k]));
-      return `<div class="act-store">
+      const hasPer = !!(ms.per && Object.keys(ms.per).length);
+      return `<div class="act-store ${hasPer ? 'per' : ''}" id="act-${i}">
         <div class="act-h"><span class="dot" style="background:${STORE_VAR[st]}"></span><b>${st}</b></div>
         <div class="fld"><label>出勤</label>
           ${mine.length ? `<div class="plist">${mine.map((r) => `<div class="pi"><b>${esc(r.staff)}</b><span class="t">${r.in ? hm(r.in) : '—'}–${r.out ? hm(r.out) : ''}</span>${r.manual ? '<span class="badge mute">手入力</span>' : '<span class="badge ok">打刻</span>'}
@@ -525,9 +527,13 @@
         ${!mine.length && (menu.length || ms.id) ? '<div class="hint" style="color:var(--warn)">出勤がないため、この店舗の売上は集計されていません。出勤を追加すると反映されます</div>' : ''}
         <div class="fld" style="margin-top:4px"><label>計上（手入力）</label>
           ${menu.length ? `<div class="hint">デジタルメニューの会計 ${menu.length}件（通常 ${yen(menuSum.normal)}・開店後 ${yen(menuSum.late)}・シャンパン ${yen(menuSum.champagne)}）${ms.id ? '<b>の代わりに、下の金額で計上中</b>' : 'の合計を表示中。直して保存すると、この金額で置き換えます'}</div>` : ''}</div>
-        <div class="row3">
-          ${[['normal', '通常売上'], ['late', '開店後売上'], ['champagne', 'シャンパン'], ['guests', '客数'], ['medals', 'メダル枚数'], ['discount', 'スタッフ割引']].map(([k, l]) => `<div class="fld"><label for="m-${k}-${i}">${l}</label><input id="m-${k}-${i}" type="number" inputmode="numeric" min="0" value="${v(k)}" data-orig="${v(k)}" data-has="${ms.id ? 1 : 0}"></div>`).join('')}
+        ${mine.length ? `<label class="per-tg"><input type="checkbox" id="per-on-${i}" data-was="${hasPer ? 1 : 0}" ${hasPer ? 'checked' : ''}> 個人ごとに入力する<span class="hint">（バックは本人の売上から計算）</span></label>` : ''}
+        <div class="row3 tot">
+          ${MS_FIELDS.map(([k, l]) => `<div class="fld"><label for="m-${k}-${i}">${l}</label><input id="m-${k}-${i}" type="number" inputmode="numeric" min="0" value="${v(k)}" data-orig="${v(k)}" data-has="${ms.id ? 1 : 0}"></div>`).join('')}
         </div>
+        <div class="perbox">${mine.map((r) => { const pv = (k) => nz(((ms.per || {})[r.staff] || {})[k]); return `<div class="per-p"><b>${esc(r.staff)}</b><div class="row3">
+          ${MS_FIELDS.map(([k, l]) => `<div class="fld"><label>${l}</label><input type="number" inputmode="numeric" min="0" value="${pv(k)}" data-orig="${pv(k)}" data-per="${i}" data-staff="${esc(r.staff)}" data-k="${k}"></div>`).join('')}
+        </div></div>`; }).join('')}</div>
       </div>`;
     };
     return `<div class="grp-h" style="margin-top:10px">実績（後から入力）</div>
@@ -561,9 +567,22 @@
       for (let i = 0; i < STORES.length; i++) {
         const ks = ['normal', 'late', 'champagne', 'guests', 'medals', 'discount'];
         const sales = {}; let changed = false;
-        for (const k of ks) { const el = $(`#m-${k}-${i}`); sales[k] = Number(el.value) || 0; if (sales[k] !== Number(el.dataset.orig)) changed = true; }
+        const cb = $(`#per-on-${i}`); const perOn = !!(cb && cb.checked);
+        if (cb && String(perOn ? 1 : 0) !== cb.dataset.was) changed = true; // 入力のしかたを切り替えた
+        let per = null;
+        if (perOn) {
+          per = {};
+          document.querySelectorAll(`[data-per="${i}"]`).forEach((el) => {
+            const p = (per[el.dataset.staff] = per[el.dataset.staff] || {});
+            p[el.dataset.k] = Number(el.value) || 0;
+            if (p[el.dataset.k] !== Number(el.dataset.orig)) changed = true;
+          });
+          for (const k of ks) sales[k] = Object.values(per).reduce((a, p) => a + (p[k] || 0), 0);
+        } else {
+          for (const k of ks) { const el = $(`#m-${k}-${i}`); sales[k] = Number(el.value) || 0; if (sales[k] !== Number(el.dataset.orig)) changed = true; }
+        }
         if (!changed) continue; // 触っていない店舗はそのまま
-        await api('manualSales', { store: STORES[i], date: ds, sales }, true);
+        await api('manualSales', { store: STORES[i], date: ds, sales, per }, true);
       }
       await afterActual(ds, '2店舗の計上を保存しました');
     } catch (e) { toast(e.message); }
@@ -666,7 +685,12 @@
     const rows = names.map((n) => {
       const days = new Set(by[n].map((r) => r.store + '|' + r.date));
       let g = 0, sales = 0;
-      for (const k of days) { const t = dayTot[k]; if (!t) continue; const c = crew[k] ? crew[k].size : 1; g += t.g / c; sales += t.s / c; }
+      for (const k of days) {
+        // 個人ごとに計上した日は本人の実績、それ以外は出勤人数で均等に割る
+        const own = by[n].filter((r) => r.store + '|' + r.date === k && r.personal);
+        if (own.length) { for (const r of own) { g += nz(r.guests); sales += nz(r.normal) + nz(r.late) + nz(r.champagne); } continue; }
+        const t = dayTot[k]; if (!t) continue; const c = crew[k] ? crew[k].size : 1; g += t.g / c; sales += t.s / c;
+      }
       const pay = by[n].reduce((x, r) => x + nz(r.pay), 0);
       const d = days.size || 1;
       return { n, days: days.size, g, sales, pay, profit: sales - pay, ppd: (sales - pay) / d, spd: sales / d, gpd: g / d };
@@ -689,7 +713,7 @@
           </div>
         </div>`).join('')}
       </div>
-      <p class="hint" style="margin:0;padding:0 16px 14px">売上・接客数は、出勤した日の店舗の会計をその日の出勤人数で均等に割って振り分けています（会計に担当スタッフが記録されていないため）。</p></div>`;
+      <p class="hint" style="margin:0;padding:0 16px 14px">売上・接客数は、個人ごとに計上した日は本人の実績、それ以外の日は店舗の会計をその日の出勤人数で均等に割って振り分けています。</p></div>`;
   }
 
   // ---------- sales dashboard ----------
@@ -940,6 +964,7 @@
     }
   });
   document.addEventListener('change', (e) => {
+    if (e.target.id && e.target.id.startsWith('per-on-')) { const box = $('#act-' + e.target.id.slice(7)); if (box) box.classList.toggle('per', e.target.checked); }
     if (e.target.matches('[data-act="pickday"]') && e.target.value) { state.day = e.target.value; state.userPickedDay = true; load(); }
   });
   // 画面に戻ってきたら最新化（打刻・会計が他端末で進むため）
