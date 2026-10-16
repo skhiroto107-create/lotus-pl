@@ -2,6 +2,7 @@
 // 保存先はこのアプリ専用の Redis（Upstash）
 //   inv:items        … 商品の一覧（店舗ごとの在庫数と発注ライン、仕入れ先ごとの値段）
 //   inv:log:{YYYY-MM} … その月の仕入れ・棚卸し・在庫修正の記録
+//   inv:ordq          … 発注リストで手で変えた発注数 { 商品id: { 店舗: 数 } }（仕入れを記録すると自動に戻る）
 const L = require('./_lib');
 
 const newId = (p) => p + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
@@ -34,10 +35,10 @@ const snap = (it) => ({ itemId: it.id, name: it.name, category: it.category || '
 
 module.exports = {
   async invList({ month }) {
-    const keys = ['inv:items'];
+    const keys = ['inv:items', 'inv:ordq'];
     if (L.isYm(month)) keys.push(`inv:log:${month}`);
-    const [items, log] = await L.getJSON(keys);
-    return { items: items || [], log: log || [] };
+    const [items, ordq, log] = await L.getJSON(keys);
+    return { items: items || [], ordq: ordq || {}, log: log || [] };
   },
 
   // 商品の追加・編集（在庫数を直接変えた場合は「在庫修正」として記録）
@@ -87,6 +88,29 @@ module.exports = {
     return { ok: true };
   },
 
+  // 発注リストの発注数を手で変える（qty が空なら自動の数に戻す）
+  async invOrdQty({ id, store, qty }, { write }) {
+    write();
+    if (!id || !L.STORES.includes(store)) throw L.httpError(400, '商品と店舗を確認してください');
+    const [cur] = await L.getJSON(['inv:ordq']);
+    const m = cur || {};
+    const o = { ...(m[id] || {}) };
+    if (qty === '' || qty == null) delete o[store]; else o[store] = qty2(qty);
+    if (Object.keys(o).length) m[id] = o; else delete m[id];
+    await L.setJSON([['inv:ordq', Object.keys(m).length ? m : null]]);
+    return { ordq: m };
+  },
+  // 手で変えた発注数をまとめて自動に戻す（stores を渡したらその店舗だけ）
+  async invOrdReset({ stores }, { write }) {
+    write();
+    const [cur] = await L.getJSON(['inv:ordq']);
+    const m = cur || {};
+    const only = Array.isArray(stores) ? stores.filter((s) => L.STORES.includes(s)) : L.STORES;
+    for (const id of Object.keys(m)) { for (const s of only) delete m[id][s]; if (!Object.keys(m[id]).length) delete m[id]; }
+    await L.setJSON([['inv:ordq', Object.keys(m).length ? m : null]]);
+    return { ordq: m };
+  },
+
   async invDelete({ id }, { write }) {
     write();
     const items = await loadItems();
@@ -114,7 +138,14 @@ module.exports = {
       else it.suppliers.push({ id: newId('s'), name: sup, price: price || null, url: '', note: '', updated: date });
     }
     it.lastPurchase = date;
-    await L.setJSON([['inv:items', items]]);
+    // 仕入れたら、その店舗の手入力の発注数は自動に戻す
+    const [oq] = await L.getJSON(['inv:ordq']);
+    const sets = [['inv:items', items]];
+    if (oq && oq[it.id] && oq[it.id][store] != null) {
+      delete oq[it.id][store]; if (!Object.keys(oq[it.id]).length) delete oq[it.id];
+      sets.push(['inv:ordq', Object.keys(oq).length ? oq : null]);
+    }
+    await L.setJSON(sets);
     const entry = { id: newId('l'), type: 'purchase', date, store, ...snap(it), qty: q, unitPrice: price, total: Math.round(q * price), supplier: sup, memo: str(memo, 100), before, after: it.stock[store], at: Date.now() };
     await appendLog([entry]);
     return { item: it, entry };
