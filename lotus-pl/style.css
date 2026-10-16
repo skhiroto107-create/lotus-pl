@@ -489,3 +489,5 @@ a.linkbtn[href]:active{opacity:.6}
 .qty-step input{width:110px;height:56px;font-size:26px;font-weight:700;text-align:center}
 .qty-step .u{font-weight:700;color:var(--ink-3)}
 .card.ord .card-h .btn+.btn{margin-left:6px}
+.ord-q.none.need{border:1.5px dashed var(--bad);color:var(--bad);background:none}
+.ord-q.none.need b{font-size:13px}
