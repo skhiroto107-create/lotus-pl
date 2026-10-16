@@ -479,3 +479,13 @@ a.linkbtn[href]:active{opacity:.6}
 .ord-q .amt{font-style:normal;font-size:10.5px;font-weight:700;color:var(--ink);margin-top:2px;font-variant-numeric:tabular-nums;white-space:nowrap}
 .ord-q.sum .amt{color:var(--ink)}
 @media (max-width:720px){ .ord-q .amt{font-size:9.5px;letter-spacing:-.03em} }
+/* 発注数の手入力 */
+.ord-q.none{border:1px dashed var(--line-2);cursor:pointer;min-height:46px}
+.ord-q.man{background:var(--plan-bg);color:var(--plan-ink);box-shadow:inset 0 0 0 1.5px var(--plan-line)}
+.ord-q.none.man{border:0}
+.ord-q.man small{font-size:9px}
+.qty-step{display:flex;align-items:center;gap:10px;margin:14px 0 6px}
+.qty-step .btn{width:56px;height:56px;font-size:26px;font-weight:700;padding:0;justify-content:center}
+.qty-step input{width:110px;height:56px;font-size:26px;font-weight:700;text-align:center}
+.qty-step .u{font-weight:700;color:var(--ink-3)}
+.card.ord .card-h .btn+.btn{margin-left:6px}
