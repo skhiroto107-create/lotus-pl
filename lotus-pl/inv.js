@@ -202,8 +202,6 @@
     const total = buys.reduce((a, e) => a + (e.total || 0), 0);
     const byCat = {}; for (const e of buys) byCat[e.category || 'その他'] = (byCat[e.category || 'その他'] || 0) + (e.total || 0);
     const bySup = {}; for (const e of buys) if (e.supplier) bySup[e.supplier] = (bySup[e.supplier] || 0) + (e.total || 0);
-    const loss = log.filter((e) => e.type === 'count' && e.qty < 0);
-    const lossYen = loss.reduce((a, e) => { const it = inv.items.find((x) => x.id === e.itemId); const c = it && unitCost(it); return a + (c ? -e.qty * c : 0); }, 0);
     const [, m] = state.month.split('-').map(Number);
     const bars = (obj) => { const xs = Object.entries(obj).sort((a, b) => b[1] - a[1]); const mx = Math.max(1, ...xs.map((x) => x[1])); return xs.length ? xs.map(([k, v]) => `<div class="inv-bar"><span>${esc(k)}</span><i style="width:${Math.max(3, (v / mx) * 100)}%"></i><b>${yen(v)}</b></div>`).join('') : '<div class="hint">まだありません</div>'; };
     const T = { purchase: ['仕入れ', 'ok'], count: ['棚卸し', 'mute'], adjust: ['在庫修正', 'warn'] };
@@ -219,7 +217,6 @@
       </div>`).join('');
     return `<div class="tiles">
         <div class="tile hero"><div class="k">${m}月の仕入れ額</div><div class="v">${yen(total)}</div><div class="s">${buys.length}件${stores.length > 1 ? ' ・ ' + STORES.map((s) => `${s} ${yen(buys.filter((e) => e.store === s).reduce((a, e) => a + e.total, 0))}`).join(' ・ ') : ''}</div></div>
-        <div class="tile"><div class="k">棚卸しの減り（目安）</div><div class="v">${yen(lossYen)}</div><div class="s">数え直して減った分 × 最安値</div></div>
       </div>
       <div class="grid2" style="margin-bottom:14px">
         <div class="card"><div class="card-h"><h3>カテゴリ別</h3></div><div class="card-b">${bars(byCat)}</div></div>
