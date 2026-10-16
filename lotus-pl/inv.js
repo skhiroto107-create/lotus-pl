@@ -36,9 +36,8 @@
   const needOf = (it, s) => Math.max(1, Math.ceil(targetOf(it, s) - stock(it, s)));
   // 発注リストで手で変えた発注数（なければ null）
   const manQ = (it, s) => { const o = (inv.ordq || {})[it.id]; return o && o[s] != null ? n2(o[s]) : null; };
-  const autoQ = (it, s) => (low(it, s) ? needOf(it, s) : 0);
-  // 発注数：手で変えた数があればそれ、なければ自動（マスト在庫数 − 今の在庫、発注ライン以下の店舗だけ）
-  const ordQ = (it, s) => { const m = manQ(it, s); return m != null ? m : autoQ(it, s); };
+  // 発注数：自分で入れた数だけ（自動では入れない）
+  const ordQ = (it, s) => manQ(it, s) || 0;
   // 発注リストに出す商品：発注が必要 or 手で数を入れた
   const inOrder = (it, stores) => stores.some((s) => low(it, s) || manQ(it, s) > 0);
   function cheapest(it) {
@@ -161,7 +160,7 @@
     // 店舗ごとの発注数（その店舗で発注が必要なときだけ）
     const needIn = ordQ;
     const rows = ordered(inv.items.filter((it) => inOrder(it, stores)));
-    const edited = rows.some((it) => stores.some((s) => manQ(it, s) != null));
+    const edited = rows.some((it) => stores.some((s) => manQ(it, s) > 0));
     const qtyOf = (it) => stores.reduce((a, s) => a + needIn(it, s), 0);
     const costOf = (it) => { const c = cheapest(it); return c ? qtyOf(it) * c.price : 0; };
     const total = rows.reduce((a, it) => a + costOf(it), 0);
@@ -177,13 +176,14 @@
     const head = `<div class="ord-head"><span></span>${stores.map((s) => `<span><i class="dot" style="background:${STORE_VAR[s]}"></i>${s.replace('店', '')}</span>`).join('')}${multi ? '<span>合計</span>' : ''}</div>`;
     const row = (it) => {
       const c = cheapest(it); const u = esc(it.unit || ''); const sum = qtyOf(it);
-      const cell = (s) => { const q = needIn(it, s); const man = manQ(it, s) != null; return q
-        ? `<button class="ord-q${man ? ' man' : ''}" data-act="invqty" data-id="${it.id}" data-store="${s}" title="${s}：今 ${n2(stock(it, s))}${u}・マスト ${targetOf(it, s)}${u}（押すと発注数を変更・仕入れを記録）"><b>${n2(q)}</b><small>${u}${man ? '・手入力' : ''}</small><em>今${n2(stock(it, s))}/${targetOf(it, s)}</em>${c ? `<i class="amt">${yen(q * c.price)}</i>` : ''}</button>`
-        : `<button class="ord-q none${man ? ' man' : ''}" data-act="invqty" data-id="${it.id}" data-store="${s}" title="${s}：押すと発注数を入れられます">—${man ? '<small>手入力</small>' : ''}</button>`; };
+      const cell = (s) => { const q = needIn(it, s); const lw = low(it, s); const tip = `${s}：今 ${n2(stock(it, s))}${u}・マスト ${targetOf(it, s)}${u}（押すと発注数を入力・仕入れを記録）`; return q
+        ? `<button class="ord-q" data-act="invqty" data-id="${it.id}" data-store="${s}" title="${tip}"><b>${n2(q)}</b><small>${u}</small><em>今${n2(stock(it, s))}/${targetOf(it, s)}</em>${c ? `<i class="amt">${yen(q * c.price)}</i>` : ''}</button>`
+        : lw ? `<button class="ord-q none need" data-act="invqty" data-id="${it.id}" data-store="${s}" title="${tip}"><b>入力</b><em>今${n2(stock(it, s))}/${targetOf(it, s)}</em></button>`
+        : `<button class="ord-q none" data-act="invqty" data-id="${it.id}" data-store="${s}" title="${tip}">—</button>`; };
       return `<div class="ord-row">
-        <div class="ord-nm"><b>${esc(it.name)}</b><div class="inv-sub">${c ? `最安 ${link(c.url, esc(c.name))} ${yen(c.price)} × ${n2(sum)} ＝ <b>${yen(sum * c.price)}</b>` : `<a class="linkbtn" target="_blank" rel="noopener noreferrer" href="${esc(searchUrl(it.name))}">ネットで最安を探す</a>`}</div></div>
+        <div class="ord-nm"><b>${esc(it.name)}</b><div class="inv-sub">${c ? `最安 ${link(c.url, esc(c.name))} ${yen(c.price)}${sum ? ` × ${n2(sum)} ＝ <b>${yen(sum * c.price)}</b>` : ''}` : `<a class="linkbtn" target="_blank" rel="noopener noreferrer" href="${esc(searchUrl(it.name))}">ネットで最安を探す</a>`}</div></div>
         ${stores.map(cell).join('')}
-        ${multi ? `<div class="ord-q sum"><b>${n2(sum)}</b><small>${u}</small>${c ? `<i class="amt">${yen(sum * c.price)}</i>` : ''}</div>` : ''}
+        ${multi ? (sum ? `<div class="ord-q sum"><b>${n2(sum)}</b><small>${u}</small>${c ? `<i class="amt">${yen(sum * c.price)}</i>` : ''}</div>` : '<span class="ord-q none" style="border:0">—</span>') : ''}
       </div>`;
     };
     // カテゴリごとに分けて表示
@@ -191,8 +191,8 @@
       const sub = xs.reduce((a, it) => a + costOf(it), 0);
       return `<div class="grp-h inv-cat">${esc(cat)} <span>${xs.length}品${sub ? `・${yen(sub)}` : ''}</span></div>` + xs.map(row).join('');
     }).join('') : '<div class="empty" style="padding:22px">発注が必要な商品はありません</div>';
-    return `<p class="hint" style="margin:0 0 12px">発注数＝マスト在庫数 − 今の在庫（発注ライン以下になった店舗だけ）。数字を押すと発注数を変えたり、その店舗の仕入れを記録できます（手で変えた数は黄色。仕入れを記録すると自動に戻ります）。小さい数字は「今の在庫／マスト在庫数」と仕入れ金額（最安の値段 × 発注数）。</p>
-      ${tiles}<div class="card ord ${multi ? '' : 'one'}"><div class="card-h"><h3>発注リスト</h3><span class="hint">${rows.length}品${total ? `・目安 ${yen(total)}` : ''}</span><span class="spacer"></span>${edited ? '<button class="btn sm" data-act="invqtyreset">発注数を自動に戻す</button>' : ''}${rows.length ? '<button class="btn sm" data-act="invcopy">リストをコピー</button>' : ''}</div>
+    return `<p class="hint" style="margin:0 0 12px">発注ライン以下になった商品が並びます。発注数は自動では入らないので、「入力」や数字を押して入れてください（その店舗の仕入れ記録もできます。仕入れを記録すると発注数は空に戻ります）。小さい数字は「今の在庫／マスト在庫数」と仕入れ金額（最安の値段 × 発注数）。</p>
+      ${tiles}<div class="card ord ${multi ? '' : 'one'}"><div class="card-h"><h3>発注リスト</h3><span class="hint">${rows.length}品${total ? `・目安 ${yen(total)}` : ''}</span><span class="spacer"></span>${edited ? '<button class="btn sm" data-act="invqtyreset">発注数をクリア</button>' : ''}${edited ? '<button class="btn sm" data-act="invcopy">リストをコピー</button>' : ''}</div>
       ${rows.length ? head : ''}${list}</div>`;
   }
 
@@ -370,27 +370,27 @@
     try { await api('invLogDelete', { id, month: state.month }, true); toast('削除しました'); await refresh(); }
     catch (e) { toast(e.message); }
   }
-  // 発注数を変えるシート（−／＋、自動に戻す、そのまま仕入れを記録）
+  // 発注数を入れるシート（−／＋、クリア、そのまま仕入れを記録）
   function openQty(id, store) {
     const it = inv.items.find((x) => x.id === id);
     if (!it) return;
     const u = esc(it.unit || ''); const c = cheapest(it);
-    const auto = autoQ(it, store); const man = manQ(it, store);
-    const cur = man != null ? man : auto;
+    const man = manQ(it, store);
+    const cur = man > 0 ? man : '';
     openSheet(`
-      <div class="sh-h"><div><h2>発注数を変更</h2><div class="sub">${esc(it.name)}・${store}</div></div>
+      <div class="sh-h"><div><h2>発注数を入力</h2><div class="sub">${esc(it.name)}・${store}</div></div>
         <button class="icon-btn x" data-act="close" aria-label="閉じる"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
       <div class="sh-b">
-        <div class="hint">今の在庫 ${stock(it, store)}${u}・マスト在庫数 ${targetOf(it, store)}${u}・自動の発注数 <b>${auto}${u}</b></div>
+        <div class="hint">今の在庫 ${stock(it, store)}${u}・マスト在庫数 ${targetOf(it, store)}${u}</div>
         <div class="qty-step">
           <button type="button" class="btn" data-act="invqtystep" data-d="-1" aria-label="1減らす">−</button>
-          <input id="q-qty" type="number" inputmode="decimal" min="0" step="1" value="${cur}">
+          <input id="q-qty" type="number" inputmode="decimal" min="0" step="1" value="${cur}" placeholder="0">
           <button type="button" class="btn" data-act="invqtystep" data-d="1" aria-label="1増やす">＋</button>
           <span class="u">${u}</span>
         </div>
         <div class="pl-row total" style="border:0"><span>仕入れ金額${c ? `（${esc(c.name)} ${yen(c.price)}）` : ''}</span><b id="q-amt">—</b></div>
       </div>
-      <div class="sh-f">${man != null ? `<button class="btn" data-act="invqtyauto" data-id="${it.id}" data-store="${store}">自動（${auto}）に戻す</button>` : ''}<span class="spacer"></span>
+      <div class="sh-f">${man > 0 ? `<button class="btn" data-act="invqtyauto" data-id="${it.id}" data-store="${store}">クリア</button>` : ''}<span class="spacer"></span>
         <button class="btn" data-act="invqtybuy" data-id="${it.id}" data-store="${store}">仕入れを記録</button>
         <button class="btn primary" data-act="invqtysave" data-id="${it.id}" data-store="${store}">決定</button></div>`);
     const upd = () => { const q = Number($('#q-qty').value) || 0; $('#q-amt').textContent = c ? yen(Math.round(q * c.price)) : '値段未登録'; };
@@ -402,21 +402,22 @@
     if (qty == null) delete o[store]; else o[store] = n2(Math.max(0, qty));
     if (Object.keys(o).length) inv.ordq[id] = o; else delete inv.ordq[id];
     closeSheet(); P.render();
-    try { const j = await api('invOrdQty', { id, store, qty: qty == null ? null : n2(Math.max(0, qty)) }, true); inv.ordq = j.ordq || {}; toast(qty == null ? '自動の発注数に戻しました' : '発注数を変更しました'); }
+    try { const j = await api('invOrdQty', { id, store, qty: qty == null ? null : n2(Math.max(0, qty)) }, true); inv.ordq = j.ordq || {}; toast(qty == null ? '発注数をクリアしました' : '発注数を入れました'); }
     catch (e) { if (prev) inv.ordq[id] = prev; else delete inv.ordq[id]; toast(e.message); }
     P.render();
   }
   async function resetQty() {
     const stores = storesInView();
-    if (!confirm('手で変えた発注数を、すべて自動の数に戻しますか？')) return;
-    try { const j = await api('invOrdReset', { stores }, true); inv.ordq = j.ordq || {}; toast('自動の発注数に戻しました'); }
+    if (!confirm('入れた発注数を、すべてクリアしますか？')) return;
+    try { const j = await api('invOrdReset', { stores }, true); inv.ordq = j.ordq || {}; toast('発注数をクリアしました'); }
     catch (e) { toast(e.message); }
     P.render();
   }
 
   async function copyOrder() {
     const stores = storesInView();
-    const items = ordered(inv.items.filter((it) => inOrder(it, stores)));
+    const items = ordered(inv.items.filter((it) => stores.some((s) => ordQ(it, s) > 0)));
+    if (!items.length) { toast('発注数を入れてください'); return; }
     const rows = catGroups(items).map(([cat, xs]) => `■${cat}\n` + xs.map((it) => {
       const c = cheapest(it); const u = it.unit || '';
       const per = stores.map((s) => ordQ(it, s));
@@ -509,7 +510,7 @@
       case 'invcopy': copyOrder(); break;
       case 'invqty': openQty(b.dataset.id, b.dataset.store); break;
       case 'invqtystep': { const i = $('#q-qty'); i.value = n2(Math.max(0, (Number(i.value) || 0) + Number(b.dataset.d))); i.dispatchEvent(new Event('input')); break; }
-      case 'invqtysave': { const v = $('#q-qty').value; saveQty(b.dataset.id, b.dataset.store, v === '' ? 0 : Number(v)); break; }
+      case 'invqtysave': { const v = Number($('#q-qty').value) || 0; saveQty(b.dataset.id, b.dataset.store, v > 0 ? v : null); break; }
       case 'invqtyauto': saveQty(b.dataset.id, b.dataset.store, null); break;
       case 'invqtybuy': { const q = Number($('#q-qty').value) || 0; openBuy(b.dataset.id, b.dataset.store); if (q && $('#b-qty')) { $('#b-qty').value = q; $('#b-qty').dispatchEvent(new Event('input')); } break; }
       case 'invqtyreset': resetQty(); break;
