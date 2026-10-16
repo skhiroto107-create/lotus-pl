@@ -247,7 +247,7 @@
     const cmin = Math.min(...draftSup.filter((x) => Number(x.price) > 0).map((x) => Number(x.price)));
     return draftSup.map((x, i) => `<div class="inv-sup">
       <input data-sup="${i}" data-k="name" placeholder="仕入れ先（例：Amazon・業務スーパー）" value="${esc(x.name)}">
-      <input data-sup="${i}" data-k="price" type="number" inputmode="numeric" min="0" placeholder="値段（1${esc($('#i-unit') ? $('#i-unit').value : '')}あたり）" value="${x.price == null ? '' : x.price}">
+      <span class="yen-in"><input data-sup="${i}" data-k="price" type="number" inputmode="numeric" min="0" placeholder="値段（1${esc($('#i-unit') ? $('#i-unit').value : '')}あたり）" value="${x.price == null ? '' : x.price}"></span>
       <input data-sup="${i}" data-k="url" type="url" inputmode="url" placeholder="URL（任意）" value="${esc(x.url || '')}">
       <div class="inv-sup-f">${Number(x.price) > 0 && Number(x.price) === cmin ? '<span class="badge ok">最安</span>' : ''}${x.url ? link(x.url, '開く') : ''}<button class="linkbtn" data-act="invsupdel" data-i="${i}">削除</button></div>
     </div>`).join('') || '<div class="hint">まだありません</div>';
@@ -321,7 +321,7 @@
         </div>
         <div class="row2">
           <div class="fld"><label for="b-sup">仕入れ先</label><input id="b-sup" list="b-sups" value="${esc(def ? def.name : '')}" placeholder="例：業務スーパー"><datalist id="b-sups">${sups.map((s) => `<option value="${esc(s.name)}">${s.price ? yen(s.price) : ''}</option>`).join('')}</datalist></div>
-          <div class="fld"><label for="b-price">単価（円）</label><input id="b-price" type="number" inputmode="numeric" min="0" value="${def && def.price ? def.price : ''}"></div>
+          <div class="fld"><label for="b-price">単価（円）</label><span class="yen-in"><input id="b-price" type="number" inputmode="numeric" min="0" value="${def && def.price ? def.price : ''}"></span></div>
         </div>
         <div class="pl-row total" style="border:0"><span>合計</span><b id="b-total">—</b></div>
         ${sups.length > 1 ? `<div class="hint">登録済みの値段：${sups.filter((s) => s.price).sort((a, b) => a.price - b.price).map((s) => `${esc(s.name)} ${yen(s.price)}`).join(' ／ ')}</div>` : ''}
