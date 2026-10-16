@@ -60,7 +60,7 @@ const actions = {
       if (ms) { excluded.push(...ords.filter((o) => !o.cancelled).map((o) => ({ ...o, replaced: true }))); ords = []; }
       if (ms) ords.push({ id: 'ms-' + s + d, name: '手入力', store: s, date: d, state: '手入力', cancelled: false, manual: true,
         guests: Number(ms.guests) || 0, kind: '', normal: Number(ms.normal) || 0, late: Number(ms.late) || 0,
-        champagne: Number(ms.champagne) || 0, medals: Number(ms.medals) || 0, discount: Number(ms.discount) || 0 });
+        champagne: Number(ms.champagne) || 0, medals: Number(ms.medals) || 0, discount: Number(ms.discount) || 0, per: ms.per || null });
       // タイムカードの打刻 ＋ 後から手入力した出勤
       const tcRecs = [...((tc && tc.records) || []), ...((man || []).map((m) => ({ ...m, manual: true })))];
       const day = L.buildDay(s, d, tcRecs, ords, cfg, ov, settings);
@@ -172,12 +172,23 @@ const actions = {
     return { ok: true };
   },
   // 計上を後から入力（デジタルメニューを使わなかった日など）。空で保存すると削除
-  async manualSales({ store, date, sales }, { write }) {
+  async manualSales({ store, date, sales, per }, { write }) {
     write();
     if (!L.STORES.includes(store) || !L.isDate(date)) throw L.httpError(400, '入力内容を確認してください');
-    const f = {};
-    for (const k of ['normal', 'late', 'champagne', 'medals', 'discount', 'guests']) f[k] = Math.max(0, Math.round(Number((sales || {})[k]) || 0));
-    const empty = Object.values(f).every((v) => !v);
+    const KS = ['normal', 'late', 'champagne', 'medals', 'discount', 'guests'];
+    const clean = (o) => { const x = {}; for (const k of KS) x[k] = Math.max(0, Math.round(Number((o || {})[k]) || 0)); return x; };
+    let f = clean(sales);
+    // 個人ごとの計上：合計は個人の合計にそろえる
+    if (per && typeof per === 'object' && Object.keys(per).length) {
+      const p = {};
+      for (const [name, v] of Object.entries(per).slice(0, 20)) { const c = clean(v); if (KS.some((k) => c[k])) p[String(name).slice(0, 30)] = c; }
+      if (Object.keys(p).length) {
+        f = clean({});
+        for (const c of Object.values(p)) for (const k of KS) f[k] += c[k];
+        f.per = p;
+      }
+    }
+    const empty = KS.every((k) => !f[k]);
     await L.setJSON([[`ms:${store}:${date}`, empty ? null : f]]);
     return { ok: true, sales: empty ? null : f };
   },
