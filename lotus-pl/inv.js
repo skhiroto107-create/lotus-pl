@@ -151,27 +151,33 @@
     return [...m.entries()].sort((a, b) => rank(a[0]) - rank(b[0]));
   }
   function viewOrder(stores) {
-    const blocks = stores.map((s) => {
-      const rows = ordered(inv.items.filter((it) => low(it, s)));
-      const total = rows.reduce((a, it) => { const c = cheapest(it); return a + (c ? needOf(it, s) * c.price : 0); }, 0);
-      const row = (it) => {
-        const c = cheapest(it); const need = needOf(it, s); const u = esc(it.unit || '');
-        return `<div class="inv-row inv-ord">
-          <div class="inv-need"><small>発注数</small><b>${need}</b><span>${u}</span></div>
-          <div class="inv-main static"><div class="inv-nm"><b>${esc(it.name)}</b></div>
-            <div class="inv-flow">今 <b>${n2(stock(it, s))}${u}</b> ＋ 発注 <b class="neg">${need}${u}</b> ＝ 発注後 <b>${n2(stock(it, s) + need)}${u}</b><span class="hint">（マスト在庫 ${targetOf(it, s)}${u}${minOf(it, s) ? `・発注ライン ${n2(minOf(it, s))}${u}` : ''}）</span></div>
-            <div class="inv-sub">${c ? `最安 ${link(c.url, esc(c.name))} ${yen(c.price)} × ${need} ＝ <b>${yen(need * c.price)}</b>` : `<a class="linkbtn" target="_blank" rel="noopener noreferrer" href="${esc(searchUrl(it.name))}">ネットで最安を探す</a>`}</div></div>
-          <div class="inv-acts"><button class="btn sm" data-act="invbuy" data-id="${it.id}" data-store="${s}" data-qty="${need}">仕入れを記録</button></div>
-        </div>`;
-      };
-      // カテゴリごとに分けて表示
-      const list = rows.length ? catGroups(rows).map(([cat, xs]) => {
-        const sub = xs.reduce((a, it) => { const c = cheapest(it); return a + (c ? needOf(it, s) * c.price : 0); }, 0);
-        return `<div class="grp-h inv-cat">${esc(cat)} <span>${xs.length}品${sub ? `・${yen(sub)}` : ''}</span></div>` + xs.map(row).join('');
-      }).join('') : '<div class="empty" style="padding:22px">発注が必要な商品はありません</div>';
-      return `<div class="card" style="margin-bottom:14px"><div class="card-h"><span class="dot" style="background:${STORE_VAR[s]}"></span><h3>${s}</h3><span class="hint">${rows.length}品${total ? `・目安 ${yen(total)}` : ''}</span><span class="spacer"></span>${rows.length ? `<button class="btn sm" data-act="invcopy" data-store="${s}">リストをコピー</button>` : ''}</div>${list}</div>`;
-    }).join('');
-    return `<p class="hint" style="margin:0 0 12px">在庫が発注ライン以下になった商品です。発注数＝マスト在庫数 − 今の在庫（マスト在庫数は商品の編集で設定。未設定なら発注ラインの2倍）。最安は登録した仕入れ先の値段から選んでいます。</p>` + blocks;
+    // 店舗ごとの発注数（その店舗で発注が必要なときだけ）
+    const needIn = (it, s) => (low(it, s) ? needOf(it, s) : 0);
+    const rows = ordered(inv.items.filter((it) => stores.some((s) => low(it, s))));
+    const qtyOf = (it) => stores.reduce((a, s) => a + needIn(it, s), 0);
+    const costOf = (it) => { const c = cheapest(it); return c ? qtyOf(it) * c.price : 0; };
+    const total = rows.reduce((a, it) => a + costOf(it), 0);
+    const multi = stores.length > 1;
+    const head = `<div class="ord-head"><span></span>${stores.map((s) => `<span><i class="dot" style="background:${STORE_VAR[s]}"></i>${s.replace('店', '')}</span>`).join('')}${multi ? '<span>合計</span>' : ''}</div>`;
+    const row = (it) => {
+      const c = cheapest(it); const u = esc(it.unit || ''); const sum = qtyOf(it);
+      const cell = (s) => { const q = needIn(it, s); return q
+        ? `<button class="ord-q" data-act="invbuy" data-id="${it.id}" data-store="${s}" data-qty="${q}" title="${s}：今 ${n2(stock(it, s))}${u}・マスト ${targetOf(it, s)}${u}（押すと仕入れを記録）"><b>${q}</b><small>${u}</small><em>今${n2(stock(it, s))}/${targetOf(it, s)}</em></button>`
+        : '<span class="ord-q none">—</span>'; };
+      return `<div class="ord-row">
+        <div class="ord-nm"><b>${esc(it.name)}</b><div class="inv-sub">${c ? `最安 ${link(c.url, esc(c.name))} ${yen(c.price)} × ${sum} ＝ <b>${yen(sum * c.price)}</b>` : `<a class="linkbtn" target="_blank" rel="noopener noreferrer" href="${esc(searchUrl(it.name))}">ネットで最安を探す</a>`}</div></div>
+        ${stores.map(cell).join('')}
+        ${multi ? `<div class="ord-q sum"><b>${sum}</b><small>${u}</small></div>` : ''}
+      </div>`;
+    };
+    // カテゴリごとに分けて表示
+    const list = rows.length ? catGroups(rows).map(([cat, xs]) => {
+      const sub = xs.reduce((a, it) => a + costOf(it), 0);
+      return `<div class="grp-h inv-cat">${esc(cat)} <span>${xs.length}品${sub ? `・${yen(sub)}` : ''}</span></div>` + xs.map(row).join('');
+    }).join('') : '<div class="empty" style="padding:22px">発注が必要な商品はありません</div>';
+    return `<p class="hint" style="margin:0 0 12px">発注数＝マスト在庫数 − 今の在庫（発注ライン以下になった店舗だけ）。数字を押すと、その店舗の仕入れを記録できます。小さい数字は「今の在庫／マスト在庫数」。</p>
+      <div class="card ord ${multi ? '' : 'one'}"><div class="card-h"><h3>発注リスト</h3><span class="hint">${rows.length}品${total ? `・目安 ${yen(total)}` : ''}</span><span class="spacer"></span>${rows.length ? '<button class="btn sm" data-act="invcopy">リストをコピー</button>' : ''}</div>
+      ${rows.length ? head : ''}${list}</div>`;
   }
 
   function viewHistory(stores) {
@@ -348,12 +354,17 @@
     try { await api('invLogDelete', { id, month: state.month }, true); toast('削除しました'); await refresh(); }
     catch (e) { toast(e.message); }
   }
-  async function copyOrder(store) {
-    const rows = catGroups(inv.items.filter((it) => low(it, store))).map(([cat, xs]) => `■${cat}\n` + xs.map((it) => {
-      const c = cheapest(it); const need = needOf(it, store);
-      return `・${it.name} ${need}${it.unit || ''}${c ? `（${c.name} ${c.price}円${c.url ? ' ' + c.url : ''}）` : ''}`;
+  async function copyOrder() {
+    const stores = storesInView();
+    const items = inv.items.filter((it) => stores.some((s) => low(it, s)));
+    const rows = catGroups(items).map(([cat, xs]) => `■${cat}\n` + xs.map((it) => {
+      const c = cheapest(it); const u = it.unit || '';
+      const per = stores.map((s) => (low(it, s) ? needOf(it, s) : 0));
+      const sum = per.reduce((a, x) => a + x, 0);
+      const parts = stores.length > 1 ? stores.map((s, k) => `${s.replace('店', '')}${per[k]}`).join(' ') + ` 計${sum}${u}` : `${sum}${u}`;
+      return `・${it.name} ${parts}${c ? `（${c.name} ${c.price}円${c.url ? ' ' + c.url : ''}）` : ''}`;
     }).join('\n'));
-    const text = `【${store} 発注リスト ${dayLabel(todayStr())}】\n` + rows.join('\n\n');
+    const text = `【発注リスト ${dayLabel(todayStr())}】\n` + rows.join('\n\n');
     try { await navigator.clipboard.writeText(text); toast('コピーしました'); }
     catch (e) { window.prompt('コピーしてください', text); }
   }
@@ -433,7 +444,7 @@
       case 'invcntstore': inv.countStore = b.dataset.v; P.render(); break;
       case 'invcountsave': saveCount(); break;
       case 'invlogdel': delLog(b.dataset.id); break;
-      case 'invcopy': copyOrder(b.dataset.store); break;
+      case 'invcopy': copyOrder(); break;
       case 'invreorder': inv.reorder = !inv.reorder; if (inv.reorder) { if (sortBy !== 'cat') sortBy = 'manual'; inv.q = ''; } P.render(); break;
       case 'invmove': moveItem(b.dataset.id, Number(b.dataset.d)); break;
     }
