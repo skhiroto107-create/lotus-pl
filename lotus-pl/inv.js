@@ -143,19 +143,31 @@
     </div>`;
   }
 
+  // カテゴリ順（酒→割材→フード→消耗品→備品→その他→それ以外）にまとめる。中は自分の並び順
+  function catGroups(items) {
+    const m = new Map();
+    for (const it of ordered(items)) { const c = it.category || 'その他'; if (!m.has(c)) m.set(c, []); m.get(c).push(it); }
+    const rank = (c) => (CATS.indexOf(c) < 0 ? 99 : CATS.indexOf(c));
+    return [...m.entries()].sort((a, b) => rank(a[0]) - rank(b[0]));
+  }
   function viewOrder(stores) {
     const blocks = stores.map((s) => {
       const rows = ordered(inv.items.filter((it) => low(it, s)));
       const total = rows.reduce((a, it) => { const c = cheapest(it); return a + (c ? needOf(it, s) * c.price : 0); }, 0);
-      const list = rows.length ? rows.map((it) => {
+      const row = (it) => {
         const c = cheapest(it); const need = needOf(it, s); const u = esc(it.unit || '');
         return `<div class="inv-row inv-ord">
           <div class="inv-need"><small>発注数</small><b>${need}</b><span>${u}</span></div>
-          <div class="inv-main static"><div class="inv-nm"><b>${esc(it.name)}</b><span class="hint">${esc(it.category || '')}</span></div>
+          <div class="inv-main static"><div class="inv-nm"><b>${esc(it.name)}</b></div>
             <div class="inv-flow">今 <b>${n2(stock(it, s))}${u}</b> ＋ 発注 <b class="neg">${need}${u}</b> ＝ 発注後 <b>${n2(stock(it, s) + need)}${u}</b><span class="hint">（マスト在庫 ${targetOf(it, s)}${u}${minOf(it, s) ? `・発注ライン ${n2(minOf(it, s))}${u}` : ''}）</span></div>
             <div class="inv-sub">${c ? `最安 ${link(c.url, esc(c.name))} ${yen(c.price)} × ${need} ＝ <b>${yen(need * c.price)}</b>` : `<a class="linkbtn" target="_blank" rel="noopener noreferrer" href="${esc(searchUrl(it.name))}">ネットで最安を探す</a>`}</div></div>
           <div class="inv-acts"><button class="btn sm" data-act="invbuy" data-id="${it.id}" data-store="${s}" data-qty="${need}">仕入れを記録</button></div>
         </div>`;
+      };
+      // カテゴリごとに分けて表示
+      const list = rows.length ? catGroups(rows).map(([cat, xs]) => {
+        const sub = xs.reduce((a, it) => { const c = cheapest(it); return a + (c ? needOf(it, s) * c.price : 0); }, 0);
+        return `<div class="grp-h inv-cat">${esc(cat)} <span>${xs.length}品${sub ? `・${yen(sub)}` : ''}</span></div>` + xs.map(row).join('');
       }).join('') : '<div class="empty" style="padding:22px">発注が必要な商品はありません</div>';
       return `<div class="card" style="margin-bottom:14px"><div class="card-h"><span class="dot" style="background:${STORE_VAR[s]}"></span><h3>${s}</h3><span class="hint">${rows.length}品${total ? `・目安 ${yen(total)}` : ''}</span><span class="spacer"></span>${rows.length ? `<button class="btn sm" data-act="invcopy" data-store="${s}">リストをコピー</button>` : ''}</div>${list}</div>`;
     }).join('');
@@ -337,11 +349,11 @@
     catch (e) { toast(e.message); }
   }
   async function copyOrder(store) {
-    const rows = inv.items.filter((it) => low(it, store)).map((it) => {
+    const rows = catGroups(inv.items.filter((it) => low(it, store))).map(([cat, xs]) => `■${cat}\n` + xs.map((it) => {
       const c = cheapest(it); const need = needOf(it, store);
       return `・${it.name} ${need}${it.unit || ''}${c ? `（${c.name} ${c.price}円${c.url ? ' ' + c.url : ''}）` : ''}`;
-    });
-    const text = `【${store} 発注リスト ${dayLabel(todayStr())}】\n` + rows.join('\n');
+    }).join('\n'));
+    const text = `【${store} 発注リスト ${dayLabel(todayStr())}】\n` + rows.join('\n\n');
     try { await navigator.clipboard.writeText(text); toast('コピーしました'); }
     catch (e) { window.prompt('コピーしてください', text); }
   }
