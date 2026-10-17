@@ -44,6 +44,15 @@
     const xs = (it.suppliers || []).filter((s) => s.price != null && s.price > 0);
     return xs.length ? xs.reduce((a, b) => (b.price < a.price ? b : a)) : null;
   }
+  // 到着予定：今日注文した場合（定期チェックで調べた「何日で届くか」から計算）
+  const WD = ['日', '月', '火', '水', '木', '金', '土'];
+  function etaOf(sp) {
+    if (!sp || sp.lead == null) return null;
+    const [y, m, d] = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10).split('-').map(Number); // 日本時間の今日
+    const t = new Date(Date.UTC(y, m - 1, d + Number(sp.lead)));
+    return { label: `${t.getUTCMonth() + 1}/${t.getUTCDate()}(${WD[t.getUTCDay()]})`, lead: Number(sp.lead), at: sp.etaAt || '', note: sp.etaNote || '' };
+  }
+  const etaTag = (sp) => { const e = etaOf(sp); return e ? `<span class="eta" title="今日注文した場合の到着予定（${esc(e.at)} に確認${e.note ? '：' + esc(e.note) : ''}）">🚚 今日注文→${e.label}着</span>` : ''; };
   const unitCost = (it) => { const c = cheapest(it); return c ? c.price : null; };
   const link = (u, t) => (u ? `<a href="${esc(u)}" target="_blank" rel="noopener noreferrer" class="linkbtn">${t}</a>` : t);
   const searchUrl = (name) => 'https://www.google.com/search?tbm=shop&q=' + encodeURIComponent(name);
@@ -140,7 +149,7 @@
     return `<div class="inv-row ${inv.reorder ? 'mv' : ''}" data-id="${it.id}" data-s="${esc((it.name + ' ' + (it.location || '') + ' ' + (it.memo || '')).toLowerCase())}">
       ${mv}<button class="inv-main" data-act="invedit" data-id="${it.id}">
         <div class="inv-nm"><b>${esc(it.name)}</b>${isLow ? '<span class="badge bad">要仕入れ</span>' : ''}</div>
-        <div class="inv-sub">${it.location ? `📍${esc(it.location)}　` : ''}${c ? `最安 <b>${yen(c.price)}</b> ${esc(c.name)}` : '<span class="hint">仕入れ先未登録</span>'}</div>
+        <div class="inv-sub">${it.location ? `📍${esc(it.location)}　` : ''}${c ? `最安 <b>${yen(c.price)}</b> ${esc(c.name)} ${etaTag(c)}` : '<span class="hint">仕入れ先未登録</span>'}</div>
       </button>
       <div class="inv-stocks">${st}</div>
       <div class="inv-acts">${c && c.url ? link(c.url, '購入') : ''}<button class="btn sm" data-act="invbuy" data-id="${it.id}">記録</button></div>
@@ -204,7 +213,7 @@
         : lw ? `<button class="ord-q none need" data-act="invqty" data-id="${it.id}" data-store="${s}" title="${tip}"><b>入力</b><em>今${n2(stock(it, s))}/${targetOf(it, s)}</em></button>`
         : `<button class="ord-q none" data-act="invqty" data-id="${it.id}" data-store="${s}" title="${tip}">—</button>`; };
       return `<div class="ord-row">
-        <div class="ord-nm"><b>${esc(it.name)}</b><div class="inv-sub">${c ? `最安 ${c.url && siteOf(c.url) ? `<span class="site-tag">${esc(siteOf(c.url))}</span>` : ''}${link(c.url, esc(c.name))} ${yen(c.price)}${sum ? ` × ${n2(sum)} ＝ <b>${yen(sum * c.price)}</b>` : ''}` : `<a class="linkbtn" target="_blank" rel="noopener noreferrer" href="${esc(searchUrl(it.name))}">ネットで最安を探す</a>`}</div></div>
+        <div class="ord-nm"><b>${esc(it.name)}</b><div class="inv-sub">${c ? `最安 ${c.url && siteOf(c.url) ? `<span class="site-tag">${esc(siteOf(c.url))}</span>` : ''}${link(c.url, esc(c.name))} ${yen(c.price)}${sum ? ` × ${n2(sum)} ＝ <b>${yen(sum * c.price)}</b>` : ''} ${etaTag(c)}` : `<a class="linkbtn" target="_blank" rel="noopener noreferrer" href="${esc(searchUrl(it.name))}">ネットで最安を探す</a>`}</div></div>
         ${stores.map(cell).join('')}
         ${multi ? (sum ? `<div class="ord-q sum"><b>${n2(sum)}</b><small>${u}</small>${c ? `<i class="amt">${yen(sum * c.price)}</i>` : ''}</div>` : '<span class="ord-q none" style="border:0">—</span>') : ''}
       </div>`;
