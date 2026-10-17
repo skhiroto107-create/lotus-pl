@@ -54,7 +54,7 @@ module.exports = {
     // 到着日数（定期チェックで入る値）は、同じ仕入れ先・同じリンクなら引き継ぐ
     for (const s of suppliers) {
       const old = prev && (prev.suppliers || []).find((x) => x.id === s.id);
-      if (old && old.url === s.url && old.lead != null) Object.assign(s, { lead: old.lead, etaAt: old.etaAt, etaNote: old.etaNote || '' });
+      if (old && old.url === s.url && old.lead != null) Object.assign(s, { lead: old.lead, etaAt: old.etaAt, etaNote: old.etaNote || '', cutoff: old.cutoff || '' });
     }
     const next = {
       ...(prev || {}), // 最終仕入れ日・前回の棚卸し日などは残す
@@ -117,7 +117,7 @@ module.exports = {
   },
 
   // 到着までの日数をまとめて保存（今日注文した場合に何日後に届くか）
-  // updates: [{ itemId, supId, lead(日数・null で消す), note }], date: 調べた日
+  // updates: [{ itemId, supId, lead(日数・null で消す), note, cutoff('HH:MM' この時刻までの注文で lead 日後に届く) }], date: 調べた日
   async invEta({ updates, date }, { write }) {
     write();
     if (!Array.isArray(updates)) throw L.httpError(400, 'updates が必要です');
@@ -128,8 +128,12 @@ module.exports = {
       const it = items.find((x) => x.id === u.itemId);
       const sp = it && (it.suppliers || []).find((x) => x.id === u.supId);
       if (!sp) continue;
-      if (u.lead === null || u.lead === '') { delete sp.lead; delete sp.etaAt; delete sp.etaNote; }
-      else { sp.lead = Math.max(0, Math.min(60, Math.round(num(u.lead)))); sp.etaAt = d; sp.etaNote = str(u.note, 80); }
+      if (u.lead === null || u.lead === '') { delete sp.lead; delete sp.etaAt; delete sp.etaNote; delete sp.cutoff; }
+      else {
+        sp.lead = Math.max(0, Math.min(60, Math.round(num(u.lead)))); sp.etaAt = d; sp.etaNote = str(u.note, 80);
+        const c = String(u.cutoff || '').match(/^(\d{1,2}):(\d{2})$/);
+        sp.cutoff = c && Number(c[1]) <= 24 && Number(c[2]) < 60 ? `${c[1].padStart(2, '0')}:${c[2]}` : '';
+      }
       n++;
     }
     await L.setJSON([['inv:items', items]]);
