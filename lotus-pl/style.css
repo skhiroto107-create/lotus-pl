@@ -508,3 +508,6 @@ a.linkbtn[href]:active{opacity:.6}
 .pl-row.fl{margin-top:4px;border-top:1px dashed var(--line);border-bottom:0}
 .pl-row.fl.over b{color:var(--bad)}
 .pl-row small.hint{font-size:11px;margin-left:6px;font-weight:600}
+.inv-pack{grid-column:1/-1;display:flex;align-items:center;gap:8px;font-size:12px;font-weight:600;color:var(--ink-2)}
+.inv-pack input{width:90px!important;flex:none}
+.inv-pack span{color:var(--ink-3);font-weight:500}
