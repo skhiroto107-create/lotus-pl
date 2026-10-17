@@ -498,3 +498,8 @@ a.linkbtn[href]:active{opacity:.6}
 .site-tag{display:inline-block;font-size:10px;font-weight:700;padding:1px 6px;border-radius:6px;background:var(--surface-3);color:var(--ink-2);margin-right:4px;vertical-align:1px}
 .eta{display:inline-block;font-size:10.5px;font-weight:700;padding:1px 7px;border-radius:6px;background:var(--ok-bg,#e6f4ea);color:var(--ok,#1e7b3a);white-space:nowrap;margin-left:2px}
 .eta.soon{background:var(--warn-bg);color:var(--warn)}
+.pl-row.exp-d{padding-left:18px;font-size:12px;opacity:.85}
+.pl-row.total.net{border-top:2px solid var(--line)}
+.exp-h{margin:4px 0 0;font-size:11.5px}
+.exp-o{display:grid;grid-template-columns:1fr 130px;gap:8px;margin-bottom:6px}
+.pl-row .linkbtn{font-size:12px;margin-left:6px}
