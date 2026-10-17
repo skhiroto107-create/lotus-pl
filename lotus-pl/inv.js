@@ -134,7 +134,7 @@
     const isLow = stores.some((s) => low(it, s));
     const st = stores.map((s) => {
       const m = minOf(it, s);
-      return `<div class="inv-st ${low(it, s) ? 'low' : ''}">${stores.length > 1 ? `<i style="background:${STORE_VAR[s]}"></i>` : ''}<b>${fmtQ(stock(it, s), it.unit)}</b>${mustOf(it, s) != null || m ? `<span>${mustOf(it, s) != null ? `マスト ${mustOf(it, s)}` : ''}${mustOf(it, s) != null && m ? '・' : ''}${m ? `発注 ${n2(m)}` : ''}</span>` : ''}</div>`;
+      return `<div class="inv-st ${low(it, s) ? 'low' : ''}">${stores.length > 1 ? `<i style="background:${STORE_VAR[s]}"></i>` : ''}<b>${fmtQ(stock(it, s), it.unit)}</b>${mustOf(it, s) != null || m ? `<span>${mustOf(it, s) != null ? `マスト ${mustOf(it, s)}` : ''}${mustOf(it, s) != null && m ? '・' : ''}${m ? `ライン ${n2(m)}` : ''}</span>` : ''}</div>`;
     }).join('');
     const mv = inv.reorder ? `<div class="inv-mv"><span class="inv-handle" data-id="${it.id}" aria-label="ドラッグで移動">≡</span><button class="icon-btn" data-act="invmove" data-id="${it.id}" data-d="-1" aria-label="上へ">↑</button><button class="icon-btn" data-act="invmove" data-id="${it.id}" data-d="1" aria-label="下へ">↓</button></div>` : '';
     return `<div class="inv-row ${inv.reorder ? 'mv' : ''}" data-id="${it.id}" data-s="${esc((it.name + ' ' + (it.location || '') + ' ' + (it.memo || '')).toLowerCase())}">
