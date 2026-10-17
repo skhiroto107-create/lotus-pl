@@ -505,3 +505,6 @@ a.linkbtn[href]:active{opacity:.6}
 .pl-row .linkbtn{font-size:12px;margin-left:6px}
 .plcard .card-h h3{font-size:11px;color:var(--ink-3);letter-spacing:.06em;font-weight:600}
 .plcard .card-h h3 small{font-size:inherit;color:inherit;font-weight:inherit}
+.pl-row.fl{margin-top:4px;border-top:1px dashed var(--line);border-bottom:0}
+.pl-row.fl.over b{color:var(--bad)}
+.pl-row small.hint{font-size:11px;margin-left:6px;font-weight:600}
