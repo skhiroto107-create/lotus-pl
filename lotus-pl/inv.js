@@ -34,9 +34,9 @@
   const low = (it, s) => { const m = minOf(it, s); if (m != null && m > 0) return stock(it, s) <= m; const t = mustOf(it, s); return t != null && stock(it, s) < t; };
   const targetOf = (it, s) => { const t = (it.target || {})[s]; return t != null && t > 0 ? n2(t) : n2((minOf(it, s) || 0) * 2); };
   const needOf = (it, s) => Math.max(1, Math.ceil(targetOf(it, s) - stock(it, s)));
-  // 仕入れ管理で手で変えた発注数（なければ null）
+  // 仕入れ管理で手で変えた仕入れ数（なければ null）
   const manQ = (it, s) => { const o = (inv.ordq || {})[it.id]; return o && o[s] != null ? n2(o[s]) : null; };
-  // 発注数：自分で入れた数だけ（自動では入れない）
+  // 仕入れ数：自分で入れた数だけ（自動では入れない）
   const ordQ = (it, s) => manQ(it, s) || 0;
   // 仕入れ管理に出す商品：発注が必要 or 手で数を入れた
   const inOrder = (it, stores) => stores.some((s) => low(it, s) || manQ(it, s) > 0);
@@ -214,7 +214,7 @@
   }
   const ordGroups = (items) => (ordGrp === 'sup' ? supGroups(items) : catGroups(items));
   function viewOrder(stores) {
-    // 店舗ごとの発注数（その店舗で発注が必要なときだけ）
+    // 店舗ごとの仕入れ数（その店舗で発注が必要なときだけ）
     const needIn = ordQ;
     const rows = ordered(inv.items.filter((it) => inOrder(it, stores)));
     const edited = rows.some((it) => stores.some((s) => manQ(it, s) > 0));
@@ -222,7 +222,7 @@
     const costOf = (it) => { const c = cheapest(it); return c ? qtyOf(it) * c.price : 0; };
     const total = rows.reduce((a, it) => a + costOf(it), 0);
     const multi = stores.length > 1;
-    // 仕入れ予定金額（最安の仕入れ先の値段 × 発注数）
+    // 仕入れ予定金額（最安の仕入れ先の値段 × 仕入れ数）
     const amtIn = (it, s) => { const c = cheapest(it); return c ? needIn(it, s) * c.price : 0; };
     const storeAmt = stores.map((s) => rows.reduce((a, it) => a + amtIn(it, s), 0));
     const noPrice = rows.filter((it) => !cheapest(it)).length;
@@ -233,7 +233,7 @@
     const head = `<div class="ord-head"><span></span>${stores.map((s) => `<span><i class="dot" style="background:${STORE_VAR[s]}"></i>${s.replace('店', '')}</span>`).join('')}${multi ? '<span>合計</span>' : ''}</div>`;
     const row = (it) => {
       const c = cheapest(it); const su = esc(it.unit || ''); const u = esc(ordUnit(it, c)); const sum = qtyOf(it);
-      const cell = (s) => { const q = needIn(it, s); const lw = low(it, s); const tip = `${s}：今 ${n2(stock(it, s))}${su}・最大 ${targetOf(it, s)}${su}（押すと発注数を入力・仕入れを記録）`; return q
+      const cell = (s) => { const q = needIn(it, s); const lw = low(it, s); const tip = `${s}：今 ${n2(stock(it, s))}${su}・最大 ${targetOf(it, s)}${su}（押すと仕入れ数を入力・仕入れを記録）`; return q
         ? `<button class="ord-q" data-act="invqty" data-id="${it.id}" data-store="${s}" title="${tip}"><b>${n2(q)}</b><small>${u}</small><em>今${n2(stock(it, s))}/${targetOf(it, s)}${su}</em>${c ? `<i class="amt">${yen(q * c.price)}</i>` : ''}</button>`
         : lw ? `<button class="ord-q none need" data-act="invqty" data-id="${it.id}" data-store="${s}" title="${tip}"><b>入力</b><em>今${n2(stock(it, s))}/${targetOf(it, s)}${su}</em></button>`
         : `<button class="ord-q none" data-act="invqty" data-id="${it.id}" data-store="${s}" title="${tip}">—</button>`; };
@@ -248,8 +248,8 @@
       const sub = xs.reduce((a, it) => a + costOf(it), 0);
       return `<div class="grp-h inv-cat">${esc(cat)} <span>${xs.length}品${sub ? `・${yen(sub)}` : ''}</span></div>` + xs.map(row).join('');
     }).join('') : '<div class="empty" style="padding:22px">発注が必要な商品はありません</div>';
-    return `<p class="hint" style="margin:0 0 12px">仕入れライン以下になった商品が並びます。発注数は自動では入らないので、「入力」や数字を押して入れてください（その店舗の仕入れ記録もできます。仕入れを記録すると発注数は空に戻ります）。小さい数字は「今の在庫／最大在庫数」と仕入れ予定金額（最安の値段 × 発注数）。</p>
-      ${tiles}<div class="card ord ${multi ? '' : 'one'}"><div class="card-h"><h3>仕入れ管理</h3><div class="ord-grp" role="tablist">${[['cat', 'カテゴリ別'], ['sup', '仕入れ先別']].map(([k, l]) => `<button class="${ordGrp === k ? 'on' : ''}" data-act="invordgrp" data-v="${k}">${l}</button>`).join('')}</div><span class="hint">${rows.length}品${total ? `・目安 ${yen(total)}` : ''}</span><span class="spacer"></span>${edited ? '<button class="btn sm" data-act="invqtyreset">発注数をクリア</button>' : ''}${edited ? '<button class="btn sm" data-act="invcopy">リストをコピー</button>' : ''}</div>
+    return `<p class="hint" style="margin:0 0 12px">仕入れライン以下になった商品が並びます。仕入れ数は自動では入らないので、「入力」や数字を押して入れてください（その店舗の仕入れ記録もできます。仕入れを記録すると仕入れ数は空に戻ります）。小さい数字は「今の在庫／最大在庫数」と仕入れ予定金額（最安の値段 × 仕入れ数）。</p>
+      ${tiles}<div class="card ord ${multi ? '' : 'one'}"><div class="card-h"><h3>仕入れ管理</h3><div class="ord-grp" role="tablist">${[['cat', 'カテゴリ別'], ['sup', '仕入れ先別']].map(([k, l]) => `<button class="${ordGrp === k ? 'on' : ''}" data-act="invordgrp" data-v="${k}">${l}</button>`).join('')}</div><span class="hint">${rows.length}品${total ? `・目安 ${yen(total)}` : ''}</span><span class="spacer"></span>${edited ? '<button class="btn sm" data-act="invqtyreset">仕入れ数をクリア</button>' : ''}${edited ? '<button class="btn sm" data-act="invcopy">リストをコピー</button>' : ''}</div>
       ${rows.length ? head : ''}${list}</div>`;
   }
 
@@ -344,7 +344,7 @@
         <div class="inv-st-edit">${STORES.map((s) => `<div class="fld"><label><span class="dot" style="background:${STORE_VAR[s]}"></span> ${s} 最大在庫数</label><input type="number" inputmode="decimal" min="0" step="0.5" data-target="${s}" value="${it && mustOf(it, s) != null ? mustOf(it, s) : ''}" placeholder="例：6"></div>
           <div class="fld"><label>仕入れライン</label><input type="number" inputmode="decimal" min="0" step="0.5" data-min="${s}" value="${it && minOf(it, s) != null ? minOf(it, s) : ''}" placeholder="空欄可"></div>
           ${it ? `<div class="fld"><label>今の在庫</label><div class="inv-now">${fmtQ(stock(it, s), it.unit)}</div></div>` : `<div class="fld"><label>今の在庫</label><input type="number" inputmode="decimal" min="0" step="0.5" data-stock="${s}" value="" placeholder="0"></div>`}`).join('')}</div>
-        <div class="hint" style="margin-top:-6px">在庫が「仕入れライン」以下（未設定なら最大在庫数を下回る）と仕入れ管理に出ます。発注数は「最大在庫数 − 今の在庫」です。${it ? '今の在庫は「仕入れ」「棚卸し」で更新されます。' : ''}</div>
+        <div class="hint" style="margin-top:-6px">在庫が「仕入れライン」以下（未設定なら最大在庫数を下回る）と仕入れ管理に出ます。仕入れ数は「最大在庫数 − 今の在庫」です。${it ? '今の在庫は「仕入れ」「棚卸し」で更新されます。' : ''}</div>
         <div class="grp-h" style="display:flex;align-items:center;gap:8px">仕入れ先と値段<span class="spacer"></span><a class="linkbtn" id="i-search" target="_blank" rel="noopener noreferrer" href="${esc(searchUrl(it ? it.name : ''))}">ネットで最安を探す</a></div>
         <div id="i-sups">${supRows()}</div>
         <div><button class="btn sm" data-act="invsupadd">＋ 仕入れ先を追加</button></div>
@@ -445,7 +445,7 @@
     try { await api('invLogDelete', { id, month: state.month }, true); toast('削除しました'); await refresh(); }
     catch (e) { toast(e.message); }
   }
-  // 発注数を入れるシート（−／＋、クリア、そのまま仕入れを記録）
+  // 仕入れ数を入れるシート（−／＋、クリア、そのまま仕入れを記録）
   function openQty(id, store) {
     const it = inv.items.find((x) => x.id === id);
     if (!it) return;
@@ -454,7 +454,7 @@
     const man = manQ(it, store);
     const cur = man > 0 ? man : '';
     openSheet(`
-      <div class="sh-h"><div><h2>発注数を入力</h2><div class="sub">${esc(it.name)}・${store}</div></div>
+      <div class="sh-h"><div><h2>仕入れ数を入力</h2><div class="sub">${esc(it.name)}・${store}</div></div>
         <button class="icon-btn x" data-act="close" aria-label="閉じる"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
       <div class="sh-b">
         <div class="hint">今の在庫 ${stock(it, store)}${u}・最大在庫数 ${targetOf(it, store)}${u}${pk > 1 ? `<br>1ケース＝${pk}${u}・最大まで あと${n2(Math.max(0, targetOf(it, store) - stock(it, store)))}${u}（約${Math.ceil(Math.max(0, targetOf(it, store) - stock(it, store)) / pk)}ケース）` : ''}</div>
@@ -478,14 +478,14 @@
     if (qty == null) delete o[store]; else o[store] = n2(Math.max(0, qty));
     if (Object.keys(o).length) inv.ordq[id] = o; else delete inv.ordq[id];
     closeSheet(); P.render();
-    try { const j = await api('invOrdQty', { id, store, qty: qty == null ? null : n2(Math.max(0, qty)) }, true); inv.ordq = j.ordq || {}; toast(qty == null ? '発注数をクリアしました' : '発注数を入れました'); }
+    try { const j = await api('invOrdQty', { id, store, qty: qty == null ? null : n2(Math.max(0, qty)) }, true); inv.ordq = j.ordq || {}; toast(qty == null ? '仕入れ数をクリアしました' : '仕入れ数を入れました'); }
     catch (e) { if (prev) inv.ordq[id] = prev; else delete inv.ordq[id]; toast(e.message); }
     P.render();
   }
   async function resetQty() {
     const stores = storesInView();
-    if (!confirm('入れた発注数を、すべてクリアしますか？')) return;
-    try { const j = await api('invOrdReset', { stores }, true); inv.ordq = j.ordq || {}; toast('発注数をクリアしました'); }
+    if (!confirm('入れた仕入れ数を、すべてクリアしますか？')) return;
+    try { const j = await api('invOrdReset', { stores }, true); inv.ordq = j.ordq || {}; toast('仕入れ数をクリアしました'); }
     catch (e) { toast(e.message); }
     P.render();
   }
@@ -493,7 +493,7 @@
   async function copyOrder() {
     const stores = storesInView();
     const items = ordered(inv.items.filter((it) => stores.some((s) => ordQ(it, s) > 0)));
-    if (!items.length) { toast('発注数を入れてください'); return; }
+    if (!items.length) { toast('仕入れ数を入れてください'); return; }
     const rows = ordGroups(items).map(([cat, xs]) => `■${cat}\n` + xs.map((it) => {
       const c = cheapest(it); const u = ordUnit(it, c);
       const per = stores.map((s) => ordQ(it, s));
