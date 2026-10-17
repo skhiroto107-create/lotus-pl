@@ -9,7 +9,7 @@
 
   const CATS = ['酒', '割材・ソフトドリンク', 'フード', '消耗品', '備品', 'その他'];
   const UNITS = ['本', '個', '袋', '箱', 'kg', 'L', 'パック', 'ケース'];
-  const VIEWS = [['list', '在庫リスト'], ['order', '仕入れ管理'], ['history', '仕入れ履歴'], ['count', '棚卸し']];
+  const VIEWS = [['list', '在庫一覧'], ['order', '仕入れ管理'], ['history', '仕入れ履歴'], ['count', '棚卸し']];
   const LSV = 'lotus_inv_view';
   let view = 'list';
   try { view = localStorage.getItem(LSV) || 'list'; } catch (e) {}
