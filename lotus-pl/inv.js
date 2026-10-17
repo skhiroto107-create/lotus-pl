@@ -112,7 +112,7 @@
     const tiles = `<div class="tiles">
       <div class="tile"><div class="k">商品数</div><div class="v">${items.length}<small>品</small></div><div class="s">${[...new Set(items.map((i) => i.category).filter(Boolean))].length} カテゴリ</div></div>
       <div class="tile"><div class="k">要仕入れ</div><div class="v ${lowCount ? 'negv' : ''}">${lowCount}<small>品</small></div><div class="s">仕入れライン以下</div></div>
-      <div class="tile"><div class="k">${m}月の仕入れ額</div><div class="v">${yen(buy)}</div><div class="s">${monthPurchases(stores, state.month).length}件</div></div>
+      <div class="tile"><div class="k">${m}月の仕入れ金額</div><div class="v">${yen(buy)}</div><div class="s">${monthPurchases(stores, state.month).length}件</div></div>
     </div>`;
     if (!items.length) {
       return tiles + `<div class="card"><div class="empty"><b>商品がまだありません</b>「商品を追加」から、お酒・割材・消耗品などを登録してください。<br>仕入れ先ごとの値段とURLを入れておくと、最安のお店がひと目でわかります。<div style="margin-top:14px"><button class="btn primary" data-act="invedit">商品を追加</button></div></div></div>`;
@@ -260,7 +260,7 @@
         ${e.type === 'purchase' ? `<button class="del" data-act="invlogdel" data-id="${e.id}" aria-label="削除"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M5 7h14M10 7V5h4v2M7 7l1 12h8l1-12"/></svg></button>` : '<span></span>'}
       </div>`).join('');
     return `<div class="tiles">
-        <div class="tile hero"><div class="k">${m}月の仕入れ額</div><div class="v">${yen(total)}</div><div class="s">${buys.length}件${stores.length > 1 ? ' ・ ' + STORES.map((s) => `${s} ${yen(buys.filter((e) => e.store === s).reduce((a, e) => a + e.total, 0))}`).join(' ・ ') : ''}</div></div>
+        <div class="tile hero"><div class="k">${m}月の仕入れ金額</div><div class="v">${yen(total)}</div><div class="s">${buys.length}件${stores.length > 1 ? ' ・ ' + STORES.map((s) => `${s} ${yen(buys.filter((e) => e.store === s).reduce((a, e) => a + e.total, 0))}`).join(' ・ ') : ''}</div></div>
       </div>
       <div class="grid2" style="margin-bottom:14px">
         <div class="card"><div class="card-h"><h3>カテゴリ別</h3></div><div class="card-b">${bars(byCat)}</div></div>
