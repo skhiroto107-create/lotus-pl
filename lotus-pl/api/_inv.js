@@ -31,14 +31,28 @@ async function appendLog(entries) {
   const cur = await L.getJSON(months.map((m) => `inv:log:${m}`));
   await L.setJSON(months.map((m, i) => [`inv:log:${m}`, [...(cur[i] || []), ...byMonth[m]]]));
 }
+// 経費（純利益用）exp:{YYYY-MM} = { 店舗: { rent, util, comm, others:[{name, amt}] } }
+// その月に入力がない店舗は、直近の月の金額を引き継ぐ（最大12か月さかのぼる）
+async function loadExp(month) {
+  if (!L.isYm(month)) return { data: {}, from: {} };
+  const [y, m] = month.split('-').map(Number);
+  const yms = []; for (let i = 0; i < 13; i++) yms.push(new Date(Date.UTC(y, m - 1 - i, 1)).toISOString().slice(0, 7));
+  const vals = await L.getJSON(yms.map((x) => `exp:${x}`));
+  const data = {}, from = {};
+  for (const st of L.STORES) {
+    const i = vals.findIndex((v) => v && v[st]);
+    if (i >= 0) { data[st] = vals[i][st]; if (i > 0) from[st] = yms[i]; }
+  }
+  return { data, from };
+}
 const snap = (it) => ({ itemId: it.id, name: it.name, category: it.category || '', unit: it.unit || '' });
 
 module.exports = {
   async invList({ month }) {
     const keys = ['inv:items', 'inv:ordq'];
     if (L.isYm(month)) keys.push(`inv:log:${month}`);
-    const [items, ordq, log] = await L.getJSON(keys);
-    return { items: items || [], ordq: ordq || {}, log: log || [] };
+    const [[items, ordq, log], exp] = await Promise.all([L.getJSON(keys), loadExp(month)]);
+    return { items: items || [], ordq: ordq || {}, log: log || [], exp };
   },
 
   // 商品の追加・編集（在庫数を直接変えた場合は「在庫修正」として記録）
@@ -138,6 +152,21 @@ module.exports = {
     }
     await L.setJSON([['inv:items', items]]);
     return { count: n };
+  },
+
+  // 経費の保存（その月・その店舗）
+  async expSave({ month, store, data }, { write }) {
+    write();
+    if (!L.isYm(month) || !L.STORES.includes(store)) throw L.httpError(400, '月と店舗を確認してください');
+    const d = data || {};
+    const clean = {
+      rent: yenInt(d.rent), util: yenInt(d.util), comm: yenInt(d.comm),
+      others: (Array.isArray(d.others) ? d.others : []).slice(0, 12).map((o) => ({ name: str(o && o.name, 20), amt: yenInt(o && o.amt) })).filter((o) => o.name || o.amt),
+    };
+    const key = `exp:${month}`;
+    const [cur] = await L.getJSON([key]);
+    await L.setJSON([[key, { ...(cur || {}), [store]: clean }]]);
+    return { exp: await loadExp(month) };
   },
 
   async invDelete({ id }, { write }) {
