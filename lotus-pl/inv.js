@@ -15,7 +15,7 @@
   try { view = localStorage.getItem(LSV) || 'list'; } catch (e) {}
   if (!VIEWS.some(([k]) => k === view)) view = 'list';
 
-  const inv = { items: null, ordq: {}, log: {}, loading: false, error: '', cat: '', q: '', countStore: null, reorder: false };
+  const inv = { items: null, ordq: {}, exp: {}, log: {}, loading: false, error: '', cat: '', q: '', countStore: null, reorder: false };
   // 並び順：manual＝自分で決めた順（並び替えボタンで変更）／cat＝カテゴリ別／name＝名前順／low＝在庫が少ない順
   const SORTS = [['manual', '自分の並び順'], ['cat', 'カテゴリ別'], ['name', '名前順'], ['low', '在庫が少ない順']];
   const LSS = 'lotus_inv_sort';
@@ -77,7 +77,7 @@
     inv.loading = true; inv.error = '';
     try {
       const j = await api('invList', { month: ym });
-      inv.items = j.items || []; inv.ordq = j.ordq || {}; inv.log[ym] = j.log || [];
+      inv.items = j.items || []; inv.ordq = j.ordq || {}; inv.exp[ym] = j.exp || { data: {}, from: {} }; inv.log[ym] = j.log || [];
     } catch (e) { inv.error = e.message; }
     inv.loading = false;
     if (state.tab === 'inv' || state.tab === 'sales') P.render();
@@ -549,6 +549,10 @@
       case 'invcountsave': saveCount(); break;
       case 'invlogdel': delLog(b.dataset.id); break;
       case 'invcopy': copyOrder(); break;
+      case 'invexp': openExp(); break;
+      case 'invexpstore': openExp(b.dataset.v); break;
+      case 'invexpadd': { const box = $('#exp-os'); const i = box.children.length; box.insertAdjacentHTML('beforeend', $('#sheet').dataset.expRow.split('__I__').join(String(i))); break; }
+      case 'invexpsave': saveExp(b.dataset.store); break;
       case 'invordgrp': ordGrp = b.dataset.v === 'sup' ? 'sup' : 'cat'; try { localStorage.setItem(LSG, ordGrp); } catch (e) {} P.render(); break;
       case 'invqty': openQty(b.dataset.id, b.dataset.store); break;
       case 'invqtystep': { const i = $('#q-qty'); i.value = n2(Math.max(0, (Number(i.value) || 0) + Number(b.dataset.d))); i.dispatchEvent(new Event('input')); break; }
@@ -570,15 +574,66 @@
       d.textContent = (v > 0 ? '+' : '') + v; d.className = 'diff ' + (v < 0 ? 'neg' : v > 0 ? 'pos' : '');
     }
     if (t.dataset && t.dataset.sup !== undefined && t.dataset.k === 'price') { readSup(); }
+    if (t.dataset && (t.dataset.ek || t.dataset.oa !== undefined)) updExp();
   });
 
-  // 売上タブの粗利カードに「今月の仕入れ額」を参考表示
+  // ---------- 純利益（粗利 − 仕入れ額 − 経費） ----------
+  const EXP_FIELDS = [['rent', '家賃'], ['util', '光熱費'], ['comm', '通信費・サブスク']];
+  const expOf = (st) => ((inv.exp[state.month] || {}).data || {})[st] || null;
+  const expSum = (e) => (e ? EXP_FIELDS.reduce((a, [k]) => a + (Number(e[k]) || 0), 0) + (e.others || []).reduce((a, o) => a + (Number(o.amt) || 0), 0) : 0);
+  const fromLabel = (ym) => { const [, m] = ym.split('-').map(Number); return `${m}月`; };
+  // 売上タブの粗利カードの下に純利益を出す
   function salesNote(stores, profit) {
-    if (!inv.log[state.month]) { ensure(); return ''; }
+    if (!inv.log[state.month] || !inv.exp[state.month]) { ensure(); return ''; }
     const buy = monthPurchases(stores, state.month).reduce((a, e) => a + (e.total || 0), 0);
-    if (!buy) return '';
-    return `<div class="pl-row sub inv-note"><span>参考：今月の仕入れ額（在庫タブ）</span><b>−${yen(buy)}</b></div>
-      <div class="pl-row sub inv-note"><span>参考：粗利 − 仕入れ額</span><b>${yen(profit - buy)}</b></div>`;
+    const ex = stores.map((st) => expOf(st));
+    const sumBy = (k) => ex.reduce((a, e) => a + (e ? Number(e[k]) || 0 : 0), 0);
+    const others = ex.reduce((a, e) => a + (e ? (e.others || []).reduce((x, o) => x + (Number(o.amt) || 0), 0) : 0), 0);
+    const expTotal = ex.reduce((a, e) => a + expSum(e), 0);
+    const net = profit - buy - expTotal;
+    const from = (inv.exp[state.month] || {}).from || {};
+    const carried = stores.filter((st) => from[st]).map((st) => `${st.replace('店', '')}は${fromLabel(from[st])}`);
+    const missing = stores.filter((st) => !expOf(st));
+    return `<div class="pl-row sub inv-note"><span>− 仕入れ額（在庫タブの仕入れ記録）</span><b>−${yen(buy)}</b></div>
+      <div class="pl-row sub inv-note"><span>− 経費 <button class="linkbtn" data-act="invexp">入力・変更</button></span><b>−${yen(expTotal)}</b></div>
+      ${EXP_FIELDS.map(([k, l]) => (sumBy(k) ? `<div class="pl-row sub inv-note exp-d"><span>${l}</span><b>${yen(sumBy(k))}</b></div>` : '')).join('')}
+      ${others ? `<div class="pl-row sub inv-note exp-d"><span>その他</span><b>${yen(others)}</b></div>` : ''}
+      <div class="pl-row total net ${net < 0 ? 'neg' : ''}"><span>純利益 <small>粗利 − 仕入れ額 − 経費</small></span><b>${yen(net)}</b></div>
+      ${missing.length ? `<div class="hint exp-h">${missing.join('・')}の経費が未入力です（「入力・変更」から）</div>` : carried.length ? `<div class="hint exp-h">${carried.join('・')}の金額を引き継いでいます</div>` : ''}`;
+  }
+  function openExp(store) {
+    const stores = storesInView();
+    const st = store || stores[0];
+    const e = expOf(st) || { rent: '', util: '', comm: '', others: [] };
+    const from = ((inv.exp[state.month] || {}).from || {})[st];
+    const [, m] = state.month.split('-').map(Number);
+    const others = (e.others || []).length ? e.others : [{ name: '', amt: '' }];
+    const oRow = (o, i) => `<div class="exp-o" data-oi="${i}"><input data-on="${i}" placeholder="項目（例：おしぼりレンタル）" value="${esc(o.name || '')}"><span class="yen-in"><input data-oa="${i}" type="number" inputmode="numeric" min="0" placeholder="金額" value="${o.amt || o.amt === 0 ? o.amt : ''}"></span></div>`;
+    openSheet(`
+      <div class="sh-h"><div><h2>${m}月の経費</h2><div class="sub">純利益 ＝ 粗利 − 仕入れ額 − 経費</div></div>
+        <button class="icon-btn x" data-act="close" aria-label="閉じる"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+      <div class="sh-b">
+        <div class="fld"><label>店舗</label><div class="chips">${STORES.map((s) => `<button type="button" class="chip-sel ${s === st ? 'on' : ''}" data-act="invexpstore" data-v="${s}">${s}</button>`).join('')}</div></div>
+        ${from ? `<div class="hint" style="margin:-4px 0 10px">${fromLabel(from)}の金額を表示しています。保存すると${m}月の金額になります。</div>` : ''}
+        <div class="row2">${EXP_FIELDS.slice(0, 2).map(([k, l]) => `<div class="fld"><label>${l}</label><span class="yen-in"><input data-ek="${k}" type="number" inputmode="numeric" min="0" value="${e[k] || e[k] === 0 ? e[k] : ''}"></span></div>`).join('')}</div>
+        <div class="fld"><label>${EXP_FIELDS[2][1]}</label><span class="yen-in"><input data-ek="comm" type="number" inputmode="numeric" min="0" value="${e.comm || e.comm === 0 ? e.comm : ''}"></span></div>
+        <div class="fld"><label>その他</label><div id="exp-os">${others.map(oRow).join('')}</div><button type="button" class="btn sm" data-act="invexpadd" style="margin-top:6px">＋ 項目を追加</button></div>
+        <div class="pl-row total" style="border:0"><span>${esc(st)} の経費合計</span><b id="exp-sum">—</b></div>
+      </div>
+      <div class="sh-f"><button class="btn" data-act="close">閉じる</button><button class="btn primary" data-act="invexpsave" data-store="${st}">保存</button></div>`);
+    $('#sheet').dataset.expRow = oRow({ name: '', amt: '' }, '__I__');
+    updExp();
+  }
+  function readExp() {
+    const d = { others: [] };
+    document.querySelectorAll('[data-ek]').forEach((el) => { d[el.dataset.ek] = el.value === '' ? 0 : Number(el.value); });
+    document.querySelectorAll('#exp-os .exp-o').forEach((row) => { const n = row.querySelector('[data-on]').value.trim(); const a = row.querySelector('[data-oa]').value; if (n || a) d.others.push({ name: n, amt: a === '' ? 0 : Number(a) }); });
+    return d;
+  }
+  function updExp() { const el = $('#exp-sum'); if (el) el.textContent = yen(expSum(readExp())); }
+  async function saveExp(store) {
+    try { const j = await api('expSave', { month: state.month, store, data: readExp() }, true); inv.exp[state.month] = j.exp; closeSheet(); toast('経費を保存しました'); P.render(); }
+    catch (e) { toast(e.message); }
   }
 
   window.LotusInv = { view: viewInv, act, salesNote };
