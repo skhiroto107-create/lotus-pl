@@ -28,9 +28,9 @@
   const fmtQ = (v, unit) => `${n2(v).toLocaleString('ja-JP')}${unit ? `<small>${esc(unit)}</small>` : ''}`;
   const stock = (it, s) => n2((it.stock || {})[s]);
   const minOf = (it, s) => ((it.minStock || {})[s] == null ? null : n2(it.minStock[s]));
-  // マスト在庫数（常に置いておきたい数）。未設定なら仕入れライン×2
+  // 最大在庫数（常に置いておきたい数）。未設定なら仕入れライン×2
   const mustOf = (it, s) => { const t = (it.target || {})[s]; return t != null && t > 0 ? n2(t) : null; };
-  // 発注が必要：仕入れライン以下になった（仕入れライン未設定ならマスト在庫数を下回った）
+  // 発注が必要：仕入れライン以下になった（仕入れライン未設定なら最大在庫数を下回った）
   const low = (it, s) => { const m = minOf(it, s); if (m != null && m > 0) return stock(it, s) <= m; const t = mustOf(it, s); return t != null && stock(it, s) < t; };
   const targetOf = (it, s) => { const t = (it.target || {})[s]; return t != null && t > 0 ? n2(t) : n2((minOf(it, s) || 0) * 2); };
   const needOf = (it, s) => Math.max(1, Math.ceil(targetOf(it, s) - stock(it, s)));
@@ -134,7 +134,7 @@
     const isLow = stores.some((s) => low(it, s));
     const st = stores.map((s) => {
       const m = minOf(it, s);
-      return `<div class="inv-st ${low(it, s) ? 'low' : ''}">${stores.length > 1 ? `<i style="background:${STORE_VAR[s]}"></i>` : ''}<b>${fmtQ(stock(it, s), it.unit)}</b>${mustOf(it, s) != null || m ? `<span>${mustOf(it, s) != null ? `マスト ${mustOf(it, s)}` : ''}${mustOf(it, s) != null && m ? '・' : ''}${m ? `ライン ${n2(m)}` : ''}</span>` : ''}</div>`;
+      return `<div class="inv-st ${low(it, s) ? 'low' : ''}">${stores.length > 1 ? `<i style="background:${STORE_VAR[s]}"></i>` : ''}<b>${fmtQ(stock(it, s), it.unit)}</b>${mustOf(it, s) != null || m ? `<span>${mustOf(it, s) != null ? `最大 ${mustOf(it, s)}` : ''}${mustOf(it, s) != null && m ? '・' : ''}${m ? `ライン ${n2(m)}` : ''}</span>` : ''}</div>`;
     }).join('');
     const mv = inv.reorder ? `<div class="inv-mv"><span class="inv-handle" data-id="${it.id}" aria-label="ドラッグで移動">≡</span><button class="icon-btn" data-act="invmove" data-id="${it.id}" data-d="-1" aria-label="上へ">↑</button><button class="icon-btn" data-act="invmove" data-id="${it.id}" data-d="1" aria-label="下へ">↓</button></div>` : '';
     return `<div class="inv-row ${inv.reorder ? 'mv' : ''}" data-id="${it.id}" data-s="${esc((it.name + ' ' + (it.location || '') + ' ' + (it.memo || '')).toLowerCase())}">
@@ -199,7 +199,7 @@
     const head = `<div class="ord-head"><span></span>${stores.map((s) => `<span><i class="dot" style="background:${STORE_VAR[s]}"></i>${s.replace('店', '')}</span>`).join('')}${multi ? '<span>合計</span>' : ''}</div>`;
     const row = (it) => {
       const c = cheapest(it); const u = esc(it.unit || ''); const sum = qtyOf(it);
-      const cell = (s) => { const q = needIn(it, s); const lw = low(it, s); const tip = `${s}：今 ${n2(stock(it, s))}${u}・マスト ${targetOf(it, s)}${u}（押すと発注数を入力・仕入れを記録）`; return q
+      const cell = (s) => { const q = needIn(it, s); const lw = low(it, s); const tip = `${s}：今 ${n2(stock(it, s))}${u}・最大 ${targetOf(it, s)}${u}（押すと発注数を入力・仕入れを記録）`; return q
         ? `<button class="ord-q" data-act="invqty" data-id="${it.id}" data-store="${s}" title="${tip}"><b>${n2(q)}</b><small>${u}</small><em>今${n2(stock(it, s))}/${targetOf(it, s)}</em>${c ? `<i class="amt">${yen(q * c.price)}</i>` : ''}</button>`
         : lw ? `<button class="ord-q none need" data-act="invqty" data-id="${it.id}" data-store="${s}" title="${tip}"><b>入力</b><em>今${n2(stock(it, s))}/${targetOf(it, s)}</em></button>`
         : `<button class="ord-q none" data-act="invqty" data-id="${it.id}" data-store="${s}" title="${tip}">—</button>`; };
@@ -214,7 +214,7 @@
       const sub = xs.reduce((a, it) => a + costOf(it), 0);
       return `<div class="grp-h inv-cat">${esc(cat)} <span>${xs.length}品${sub ? `・${yen(sub)}` : ''}</span></div>` + xs.map(row).join('');
     }).join('') : '<div class="empty" style="padding:22px">発注が必要な商品はありません</div>';
-    return `<p class="hint" style="margin:0 0 12px">仕入れライン以下になった商品が並びます。発注数は自動では入らないので、「入力」や数字を押して入れてください（その店舗の仕入れ記録もできます。仕入れを記録すると発注数は空に戻ります）。小さい数字は「今の在庫／マスト在庫数」と仕入れ予定金額（最安の値段 × 発注数）。</p>
+    return `<p class="hint" style="margin:0 0 12px">仕入れライン以下になった商品が並びます。発注数は自動では入らないので、「入力」や数字を押して入れてください（その店舗の仕入れ記録もできます。仕入れを記録すると発注数は空に戻ります）。小さい数字は「今の在庫／最大在庫数」と仕入れ予定金額（最安の値段 × 発注数）。</p>
       ${tiles}<div class="card ord ${multi ? '' : 'one'}"><div class="card-h"><h3>仕入れ管理</h3><div class="ord-grp" role="tablist">${[['cat', 'カテゴリ別'], ['sup', '仕入れ先別']].map(([k, l]) => `<button class="${ordGrp === k ? 'on' : ''}" data-act="invordgrp" data-v="${k}">${l}</button>`).join('')}</div><span class="hint">${rows.length}品${total ? `・目安 ${yen(total)}` : ''}</span><span class="spacer"></span>${edited ? '<button class="btn sm" data-act="invqtyreset">発注数をクリア</button>' : ''}${edited ? '<button class="btn sm" data-act="invcopy">リストをコピー</button>' : ''}</div>
       ${rows.length ? head : ''}${list}</div>`;
   }
@@ -302,11 +302,11 @@
           <div class="fld"><label for="i-unit">単位</label><select id="i-unit">${(() => { const u = it ? it.unit : '本'; return [...new Set([...UNITS, ...(u ? [u] : [])])].map((c) => `<option value="${esc(c)}" ${c === u ? 'selected' : ''}>${esc(c)}</option>`).join(''); })()}</select></div>
           <div class="fld"><label for="i-loc">保管場所</label><input id="i-loc" value="${esc(it ? it.location || '' : '')}" placeholder="例：バックヤード棚"></div>
         </div>
-        <div class="grp-h">マスト在庫数と仕入れライン</div>
-        <div class="inv-st-edit">${STORES.map((s) => `<div class="fld"><label><span class="dot" style="background:${STORE_VAR[s]}"></span> ${s} マスト在庫数</label><input type="number" inputmode="decimal" min="0" step="0.5" data-target="${s}" value="${it && mustOf(it, s) != null ? mustOf(it, s) : ''}" placeholder="例：6"></div>
+        <div class="grp-h">最大在庫数と仕入れライン</div>
+        <div class="inv-st-edit">${STORES.map((s) => `<div class="fld"><label><span class="dot" style="background:${STORE_VAR[s]}"></span> ${s} 最大在庫数</label><input type="number" inputmode="decimal" min="0" step="0.5" data-target="${s}" value="${it && mustOf(it, s) != null ? mustOf(it, s) : ''}" placeholder="例：6"></div>
           <div class="fld"><label>仕入れライン</label><input type="number" inputmode="decimal" min="0" step="0.5" data-min="${s}" value="${it && minOf(it, s) != null ? minOf(it, s) : ''}" placeholder="空欄可"></div>
           ${it ? `<div class="fld"><label>今の在庫</label><div class="inv-now">${fmtQ(stock(it, s), it.unit)}</div></div>` : `<div class="fld"><label>今の在庫</label><input type="number" inputmode="decimal" min="0" step="0.5" data-stock="${s}" value="" placeholder="0"></div>`}`).join('')}</div>
-        <div class="hint" style="margin-top:-6px">在庫が「仕入れライン」以下（未設定ならマスト在庫数を下回る）と仕入れ管理に出ます。発注数は「マスト在庫数 − 今の在庫」です。${it ? '今の在庫は「仕入れ」「棚卸し」で更新されます。' : ''}</div>
+        <div class="hint" style="margin-top:-6px">在庫が「仕入れライン」以下（未設定なら最大在庫数を下回る）と仕入れ管理に出ます。発注数は「最大在庫数 − 今の在庫」です。${it ? '今の在庫は「仕入れ」「棚卸し」で更新されます。' : ''}</div>
         <div class="grp-h" style="display:flex;align-items:center;gap:8px">仕入れ先と値段<span class="spacer"></span><a class="linkbtn" id="i-search" target="_blank" rel="noopener noreferrer" href="${esc(searchUrl(it ? it.name : ''))}">ネットで最安を探す</a></div>
         <div id="i-sups">${supRows()}</div>
         <div><button class="btn sm" data-act="invsupadd">＋ 仕入れ先を追加</button></div>
@@ -401,7 +401,7 @@
       <div class="sh-h"><div><h2>発注数を入力</h2><div class="sub">${esc(it.name)}・${store}</div></div>
         <button class="icon-btn x" data-act="close" aria-label="閉じる"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
       <div class="sh-b">
-        <div class="hint">今の在庫 ${stock(it, store)}${u}・マスト在庫数 ${targetOf(it, store)}${u}</div>
+        <div class="hint">今の在庫 ${stock(it, store)}${u}・最大在庫数 ${targetOf(it, store)}${u}</div>
         <div class="qty-step">
           <button type="button" class="btn" data-act="invqtystep" data-d="-1" aria-label="1減らす">−</button>
           <input id="q-qty" type="number" inputmode="decimal" min="0" step="1" value="${cur}" placeholder="0">
