@@ -363,7 +363,7 @@
         ${sups.length > 1 ? `<div class="hint">登録済みの値段：${sups.filter((s) => s.price).sort((a, b) => a.price - b.price).map((s) => `${esc(s.name)} ${yen(s.price)}`).join(' ／ ')}</div>` : ''}
         <div class="fld"><label for="b-memo">メモ（任意）</label><input id="b-memo" placeholder="例：セールで購入"></div>
       </div>
-      <div class="sh-f"><button class="btn" data-act="close">閉じる</button><button class="btn primary" data-act="invbuysave" data-id="${it.id}">記録する</button></div>`);
+      <div class="sh-f"><button class="btn" data-act="close">閉じる</button><button class="btn primary" data-act="invbuysave" data-id="${it.id}">仕入れ済み</button></div>`);
     $('#sheet').dataset.store = st;
     const upd = () => { const q = Number($('#b-qty').value) || 0, p = Number($('#b-price').value) || 0; $('#b-total').textContent = yen(Math.round(q * p)); };
     $('#b-qty').addEventListener('input', upd); $('#b-price').addEventListener('input', upd);
