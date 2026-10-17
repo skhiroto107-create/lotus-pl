@@ -87,13 +87,11 @@
   function viewList(stores, lowCount) {
     const items = inv.items;
     const buy = monthPurchases(stores, state.month).reduce((a, e) => a + (e.total || 0), 0);
-    const value = items.reduce((a, it) => { const c = unitCost(it); return a + (c ? stores.reduce((x, s) => x + stock(it, s) * c, 0) : 0); }, 0);
     const [, m] = state.month.split('-').map(Number);
     const tiles = `<div class="tiles">
       <div class="tile"><div class="k">商品数</div><div class="v">${items.length}<small>品</small></div><div class="s">${[...new Set(items.map((i) => i.category).filter(Boolean))].length} カテゴリ</div></div>
       <div class="tile"><div class="k">要発注</div><div class="v ${lowCount ? 'negv' : ''}">${lowCount}<small>品</small></div><div class="s">発注ライン以下</div></div>
       <div class="tile"><div class="k">${m}月の仕入れ額</div><div class="v">${yen(buy)}</div><div class="s">${monthPurchases(stores, state.month).length}件</div></div>
-      <div class="tile"><div class="k">在庫金額（目安）</div><div class="v">${yen(value)}</div><div class="s">在庫数 × 最安値</div></div>
     </div>`;
     if (!items.length) {
       return tiles + `<div class="card"><div class="empty"><b>商品がまだありません</b>「商品を追加」から、お酒・割材・消耗品などを登録してください。<br>仕入れ先ごとの値段とURLを入れておくと、最安のお店がひと目でわかります。<div style="margin-top:14px"><button class="btn primary" data-act="invedit">商品を追加</button></div></div></div>`;
