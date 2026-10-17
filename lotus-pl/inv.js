@@ -234,8 +234,8 @@
     const row = (it) => {
       const c = cheapest(it); const su = esc(it.unit || ''); const u = esc(ordUnit(it, c)); const sum = qtyOf(it);
       const cell = (s) => { const q = needIn(it, s); const lw = low(it, s); const tip = `${s}：今 ${n2(stock(it, s))}${su}・最大 ${targetOf(it, s)}${su}（押すと仕入れ数を入力・仕入れを記録）`; return q
-        ? `<button class="ord-q" data-act="invqty" data-id="${it.id}" data-store="${s}" title="${tip}"><b>${n2(q)}</b><em>今${n2(stock(it, s))}/${targetOf(it, s)}</em>${c ? `<i class="amt">${yen(q * c.price)}</i>` : ''}</button>`
-        : lw ? `<button class="ord-q none need" data-act="invqty" data-id="${it.id}" data-store="${s}" title="${tip}"><b>入力</b><em>今${n2(stock(it, s))}/${targetOf(it, s)}</em></button>`
+        ? `<button class="ord-q" data-act="invqty" data-id="${it.id}" data-store="${s}" title="${tip}"><b>${n2(q)}</b><em>今${n2(stock(it, s))}/${targetOf(it, s)}${su}</em>${c ? `<i class="amt">${yen(q * c.price)}</i>` : ''}</button>`
+        : lw ? `<button class="ord-q none need" data-act="invqty" data-id="${it.id}" data-store="${s}" title="${tip}"><b>入力</b><em>今${n2(stock(it, s))}/${targetOf(it, s)}${su}</em></button>`
         : `<button class="ord-q none" data-act="invqty" data-id="${it.id}" data-store="${s}" title="${tip}">—</button>`; };
       return `<div class="ord-row">
         <div class="ord-nm"><b>${esc(it.name)}</b><div class="inv-sub">${c ? `最安 ${c.url && siteOf(c.url) ? `<span class="site-tag">${esc(siteOf(c.url))}</span>` : ''}${link(c.url, esc(c.name))} ${priceLabel(it, c)}${sum ? ` × ${n2(sum)}${u} ＝ <b>${yen(sum * c.price)}</b>` : ''} ${etaTag(c)}` : `<a class="linkbtn" target="_blank" rel="noopener noreferrer" href="${esc(searchUrl(it.name))}">ネットで最安を探す</a>`}</div></div>
