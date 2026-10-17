@@ -496,3 +496,4 @@ a.linkbtn[href]:active{opacity:.6}
 .ord-grp button.on{background:var(--surface);color:var(--ink);box-shadow:var(--shadow)}
 .card.ord .card-h{flex-wrap:wrap;row-gap:8px}
 .site-tag{display:inline-block;font-size:10px;font-weight:700;padding:1px 6px;border-radius:6px;background:var(--surface-3);color:var(--ink-2);margin-right:4px;vertical-align:1px}
+.eta{display:inline-block;font-size:10.5px;font-weight:700;padding:1px 7px;border-radius:6px;background:var(--ok-bg,#e6f4ea);color:var(--ok,#1e7b3a);white-space:nowrap;margin-left:2px}
