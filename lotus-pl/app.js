@@ -745,14 +745,7 @@
       <div class="tile"><div class="k">客単価</div><div class="v">${os.guests ? yen((os.normal + os.late + os.champagne) / os.guests) : '—'}</div><div class="s">デジタル注文ベース</div></div>
       <div class="tile"><div class="k">人件費率</div><div class="v">${salesAll ? Math.round((rs.pay / salesAll) * 1000) / 10 + '<small>%</small>' : '—'}</div><div class="s">給料 ${yen(rs.pay)}</div></div>
     </div>
-    <div class="card plcard" style="margin-bottom:14px"><div class="card-h"><h3>PL <small class="hint" style="font-weight:500">損益</small></h3><span class="spacer"></span><span class="hint">粗利 ＝ 売上 − 人件費 ／ 純利益 ＝ 粗利 − 仕入れ額 − 経費</span></div>
-      <div class="card-b"><div class="pl">
-        <div class="pl-row total"><span>売上 <small>通常＋開店後＋シャンパン</small></span><b>${yen(os.gross)}</b></div>
-        <div class="pl-row sub"><span>− バック（通常10%・開店後50%・シャンパン20%・メダル¥50）</span><b>−${yen(rs.back)}</b></div>
-        <div class="pl-row sub"><span>− 時間給</span><b>−${yen(rs.wage)}</b></div>
-        <div class="pl-row total ${gp.profit < 0 ? 'neg' : ''}"><span>粗利 <small>粗利率 ${os.gross ? Math.round((gp.profit / os.gross) * 1000) / 10 : 0}%</small></span><b>${yen(gp.profit)}</b></div>
-        ${window.LotusInv ? window.LotusInv.salesNote(stores, gp.profit) : ''}
-      </div></div></div>
+    ${plCard(stores, os, rs)}
     ${salesCalendar(stores, recs, orders)}`;
 
     const legend = stores.length > 1 ? `<div class="lg">${stores.map((s) => `<span><span class="sw" style="background:${STORE_VAR[s]}"></span>${s}</span>`).join('')}</div>` : '';
@@ -761,14 +754,46 @@
       <div class="card-b">${state.showTable ? salesTable(perDay, stores) : `<div class="chart" id="chart">${chartSvg(perDay, stores)}</div>`}</div></div>`;
 
     const breakdown = `<div class="card"><div class="card-h"><h3>店舗別の内訳</h3></div><div class="tbl-wrap"><table class="tbl" style="min-width:640px">
-      <thead><tr><th>店舗</th><th>売上</th><th>通常</th><th>開店後</th><th>シャンパン</th><th>割引</th><th>メダル</th><th>客数</th><th>粗利</th><th>給料</th></tr></thead><tbody>
+      <thead><tr><th>店舗</th><th>売上</th><th>通常</th><th>開店後</th><th>シャンパン</th><th>割引</th><th>メダル</th><th>客数</th><th>人件費後</th><th>給料</th></tr></thead><tbody>
       ${stores.map((st) => { const a = sumRecords(recs.filter((r) => r.store === st)); const o = sumOrders(orders.filter((x) => x.store === st));
         return `<tr><td><span class="nmcell"><span class="dot" style="background:${STORE_VAR[st]}"></span>${st}</span></td><td class="strong">${yen(o.gross)}</td><td>${yen(o.normal)}</td><td>${yen(o.late)}</td><td>${yen(o.champagne)}</td><td>${yen(o.discount)}</td><td>${o.medals}枚</td><td>${o.guests}人</td><td>${yen(grossProfit(o, a).profit)}</td><td>${yen(a.pay)}</td></tr>`; }).join('')}
       </tbody></table></div></div>`;
     return tiles + chartCard + breakdown;
   }
 
-  // 粗利 = 売上（通常＋開店後＋シャンパン）− 人件費（時間給＋バック）。原価は含めない
+  // PL（飲食店の損益）：売上 − 原価 ＝ 粗利 − 人件費 − 経費 ＝ 営業利益
+  // 原価 ＝ 仕入れ額 ＋ 月初在庫 − 月末在庫（在庫は最安の値段で金額にする）
+  function plCard(stores, os, rs) {
+    const pct = (x) => (os.gross ? `${Math.round((x / os.gross) * 1000) / 10}%` : '—');
+    const p = window.LotusInv ? window.LotusInv.plData(stores) : null;
+    const head = `<div class="card plcard" style="margin-bottom:14px"><div class="card-h"><h3>PL <small class="hint" style="font-weight:500">損益</small></h3><span class="spacer"></span><span class="hint">売上 − 原価 ＝ 粗利 − 人件費 − 経費 ＝ 営業利益</span></div><div class="card-b"><div class="pl">`;
+    const sales = `<div class="pl-row total"><span>売上 <small>通常＋開店後＋シャンパン</small></span><b>${yen(os.gross)}</b></div>`;
+    const labor = `<div class="pl-row sub"><span>− 人件費 <small class="hint">L ${pct(rs.pay)}</small></span><b>−${yen(rs.pay)}</b></div>
+        <div class="pl-row sub exp-d"><span>バック（通常10%・開店後50%・シャンパン20%・メダル¥50）</span><b>${yen(rs.back)}</b></div>
+        <div class="pl-row sub exp-d"><span>時間給</span><b>${yen(rs.wage)}</b></div>`;
+    if (!p) return head + sales + labor + '<div class="hint" style="padding:8px 0">原価・経費を読み込み中…</div></div></div></div>';
+    const gross = os.gross - p.cost;
+    const op = gross - rs.pay - p.expTotal;
+    const fl = p.cost + rs.pay;
+    const stockRows = p.useStock
+      ? `<div class="pl-row sub exp-d"><span>＋ 月初の在庫</span><b>${yen(p.invStart)}</b></div><div class="pl-row sub exp-d"><span>− 月末の在庫${p.endIsNow ? '（今の在庫）' : ''}</span><b>${yen(p.invEnd)}</b></div>`
+      : '<div class="pl-row sub exp-d"><span>在庫の増減：記録を始めた月のため計算なし</span><b></b></div>';
+    return head + sales + `
+        <div class="pl-row sub"><span>− 原価 <small class="hint">F ${pct(p.cost)}</small></span><b>−${yen(p.cost)}</b></div>
+        <div class="pl-row sub exp-d"><span>仕入れ額（在庫タブの仕入れ記録）</span><b>${yen(p.buy)}</b></div>
+        ${stockRows}
+        <div class="pl-row total ${gross < 0 ? 'neg' : ''}"><span>粗利 <small>粗利率 ${pct(gross)}</small></span><b>${yen(gross)}</b></div>
+        ${labor}
+        <div class="pl-row sub"><span>− 経費 <button class="linkbtn" data-act="invexp">入力・変更</button></span><b>−${yen(p.expTotal)}</b></div>
+        ${p.expLines.map(([l, x]) => `<div class="pl-row sub exp-d"><span>${l}</span><b>${yen(x)}</b></div>`).join('')}
+        <div class="pl-row total net ${op < 0 ? 'neg' : ''}"><span>営業利益 <small>営業利益率 ${pct(op)}</small></span><b>${yen(op)}</b></div>
+        <div class="pl-row sub fl ${os.gross && fl / os.gross > 0.6 ? 'over' : ''}"><span>FLコスト（原価＋人件費） <small class="hint">目安 売上の60%以内</small></span><b>${yen(fl)}（${pct(fl)}）</b></div>
+        ${p.expNote ? `<div class="hint exp-h">${p.expNote}</div>` : ''}
+        ${p.noPrice ? `<div class="hint exp-h">値段が未登録の商品（${p.noPrice}品）は在庫金額に入っていません</div>` : ''}
+      </div></div></div>`;
+  }
+
+  // 売上 − 人件費（時間給＋バック）。カレンダーと店舗別の内訳で使う（原価・経費は含めない）
   function grossProfit(os, rs) {
     return { profit: os.gross - rs.pay };
   }
@@ -796,14 +821,14 @@
       const wd = weekday(v.ds), lv = v.net > 0 ? Math.max(0.12, v.net / max) : 0;
       cells += `<button class="cell scell ${v.ds === today ? 'today' : ''} ${wd === 0 ? 'sun' : wd === 6 ? 'sat' : ''}" data-act="gotoday" data-date="${v.ds}" style="--lv:${lv}">
         <div class="d"><span>${Number(v.ds.slice(8))}</span></div>
-        ${v.has ? `<div class="sv" title="日次売上（バック控除後）">${yenExact(v.net)}</div><div class="sg">粗利 ${yenExact(v.gp)}</div>
+        ${v.has ? `<div class="sv" title="日次売上（バック控除後）">${yenExact(v.net)}</div><div class="sg">人件費後 ${yenExact(v.gp)}</div>
         ${stores.length > 1 ? `<div class="sp">${v.per.filter(([, x]) => x).map(([st, x]) => `<span><i style="background:${STORE_VAR[st]}"></i>${yenExact(x)}</span>`).join(' ')}</div>` : ''}
         <div class="sn">${v.n}件 ${v.guests}人</div>` : ''}
       </button>`;
     }
     const tail = (first + days) % 7;
     if (tail) for (let i = tail; i < 7; i++) cells += '<div class="cell out"></div>';
-    return `<div class="card" style="margin-bottom:14px"><div class="card-h"><h3>売上カレンダー</h3><span class="spacer"></span><span class="hint">日次売上（バック控除後）・粗利（売上−人件費） ／ タップでその日の日次計上へ</span></div>
+    return `<div class="card" style="margin-bottom:14px"><div class="card-h"><h3>売上カレンダー</h3><span class="spacer"></span><span class="hint">日次売上（バック控除後）・人件費後（売上−人件費） ／ タップでその日の日次計上へ</span></div>
       <div class="card-b"><div class="cal">${cells}</div></div></div>`;
   }
 
