@@ -45,6 +45,33 @@ async function loadExp(month) {
   }
   return { data, from };
 }
+// 在庫金額（原価計算用）：月初と月末の在庫数 × 最安の値段（店舗ごと）
+// その日時点の在庫数 ＝ 今の在庫から、その日より後の記録（仕入れ・棚卸し・修正）を巻き戻して求める
+const ymAdd = (ym, n) => { const [y, m] = ym.split('-').map(Number); return new Date(Date.UTC(y, m - 1 + n, 1)).toISOString().slice(0, 7); };
+const lastDay = (ym) => { const [y, m] = ym.split('-').map(Number); return new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10); };
+async function stockValue(month, items) {
+  if (!L.isYm(month)) return null;
+  const nowYm = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 7);
+  const after = []; for (let ym = month; ym <= nowYm && after.length < 24; ym = ymAdd(ym, 1)) after.push(ym);
+  const before = []; for (let i = 1; i <= 12; i++) before.push(ymAdd(month, -i));
+  const vals = await L.getJSON([...after, ...before].map((x) => `inv:log:${x}`));
+  const logs = vals.slice(0, after.length).flat().filter(Boolean).filter((e) => e.store && e.itemId && e.before != null);
+  const hasHistory = vals.slice(after.length).some((v) => v && v.length);
+  logs.sort((a, b) => (a.date + String(a.at)).localeCompare(b.date + String(b.at)));
+  const price = (it) => { const xs = (it.suppliers || []).filter((x) => x.price > 0).map((x) => x.price); return xs.length ? Math.min(...xs) : 0; };
+  const at = (cut) => { // cut 日の終わり時点
+    const v = {};
+    for (const st of L.STORES) v[st] = 0;
+    for (const it of items) for (const st of L.STORES) {
+      const first = logs.find((e) => e.itemId === it.id && e.store === st && e.date > cut);
+      const q = first ? num(first.before) : num((it.stock || {})[st]);
+      v[st] += Math.round(q * price(it));
+    }
+    return v;
+  };
+  const isNow = month >= nowYm;
+  return { start: at(lastDay(ymAdd(month, -1))), end: at(lastDay(month)), hasHistory, endIsNow: isNow, noPrice: items.filter((it) => !price(it)).length };
+}
 const snap = (it) => ({ itemId: it.id, name: it.name, category: it.category || '', unit: it.unit || '' });
 
 module.exports = {
@@ -52,7 +79,8 @@ module.exports = {
     const keys = ['inv:items', 'inv:ordq'];
     if (L.isYm(month)) keys.push(`inv:log:${month}`);
     const [[items, ordq, log], exp] = await Promise.all([L.getJSON(keys), loadExp(month)]);
-    return { items: items || [], ordq: ordq || {}, log: log || [], exp };
+    const val = await stockValue(month, items || []).catch(() => null);
+    return { items: items || [], ordq: ordq || {}, log: log || [], exp, val };
   },
 
   // 商品の追加・編集（在庫数を直接変えた場合は「在庫修正」として記録）
