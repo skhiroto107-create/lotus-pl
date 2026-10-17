@@ -46,13 +46,25 @@
   }
   // 到着予定：今日注文した場合（定期チェックで調べた「何日で届くか」から計算）
   const WD = ['日', '月', '火', '水', '木', '金', '土'];
+  // cutoff（例 '13:00'）＝その時刻までの注文なら lead 日後に届く。過ぎたら翌日注文扱いで +1日
   function etaOf(sp) {
     if (!sp || sp.lead == null) return null;
-    const [y, m, d] = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10).split('-').map(Number); // 日本時間の今日
-    const t = new Date(Date.UTC(y, m - 1, d + Number(sp.lead)));
-    return { label: `${t.getUTCMonth() + 1}/${t.getUTCDate()}(${WD[t.getUTCDay()]})`, lead: Number(sp.lead), at: sp.etaAt || '', note: sp.etaNote || '' };
+    const j = new Date(Date.now() + 9 * 3600e3); // 日本時間
+    const [y, m, d] = j.toISOString().slice(0, 10).split('-').map(Number);
+    const nowMin = j.getUTCHours() * 60 + j.getUTCMinutes();
+    const c = /^(\d{2}):(\d{2})$/.exec(sp.cutoff || '');
+    const cutMin = c ? Math.min(24 * 60, Number(c[1]) * 60 + Number(c[2])) : null;
+    const late = cutMin != null && nowMin >= cutMin;
+    const t = new Date(Date.UTC(y, m - 1, d + Number(sp.lead) + (late ? 1 : 0)));
+    const left = cutMin != null && !late ? cutMin - nowMin : null;
+    const leftLabel = left == null ? '' : left >= 60 ? `約${Math.floor(left / 60)}時間` : `約${left}分`;
+    return { label: `${t.getUTCMonth() + 1}/${t.getUTCDate()}(${WD[t.getUTCDay()]})`, lead: Number(sp.lead), at: sp.etaAt || '', note: sp.etaNote || '', cutoff: sp.cutoff || '', late, leftLabel };
   }
-  const etaTag = (sp) => { const e = etaOf(sp); return e ? `<span class="eta" title="今日注文した場合の到着予定（${esc(e.at)} に確認${e.note ? '：' + esc(e.note) : ''}）">🚚 今日注文→${e.label}着</span>` : ''; };
+  const etaTag = (sp) => {
+    const e = etaOf(sp); if (!e) return '';
+    const head = e.leftLabel ? `今日あと${e.leftLabel}以内の注文で` : e.late ? `締切${e.cutoff}過ぎ→明日注文で` : '今日注文→';
+    return `<span class="eta ${e.leftLabel && /分$/.test(e.leftLabel) ? 'soon' : ''}" title="到着予定（${esc(e.at)} に確認${e.note ? '：' + esc(e.note) : ''}${e.cutoff ? `・締切 ${e.cutoff}` : ''}）">🚚 ${head}${e.leftLabel ? '→' : ''}${e.label}着</span>`;
+  };
   const unitCost = (it) => { const c = cheapest(it); return c ? c.price : null; };
   const link = (u, t) => (u ? `<a href="${esc(u)}" target="_blank" rel="noopener noreferrer" class="linkbtn">${t}</a>` : t);
   const searchUrl = (name) => 'https://www.google.com/search?tbm=shop&q=' + encodeURIComponent(name);
