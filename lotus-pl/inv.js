@@ -15,7 +15,7 @@
   try { view = localStorage.getItem(LSV) || 'list'; } catch (e) {}
   if (!VIEWS.some(([k]) => k === view)) view = 'list';
 
-  const inv = { items: null, ordq: {}, exp: {}, log: {}, loading: false, error: '', cat: '', q: '', countStore: null, reorder: false };
+  const inv = { items: null, ordq: {}, exp: {}, val: {}, log: {}, loading: false, error: '', cat: '', q: '', countStore: null, reorder: false };
   // 並び順：manual＝自分で決めた順（並び替えボタンで変更）／cat＝カテゴリ別／name＝名前順／low＝在庫が少ない順
   const SORTS = [['manual', '自分の並び順'], ['cat', 'カテゴリ別'], ['name', '名前順'], ['low', '在庫が少ない順']];
   const LSS = 'lotus_inv_sort';
@@ -77,7 +77,7 @@
     inv.loading = true; inv.error = '';
     try {
       const j = await api('invList', { month: ym });
-      inv.items = j.items || []; inv.ordq = j.ordq || {}; inv.exp[ym] = j.exp || { data: {}, from: {} }; inv.log[ym] = j.log || [];
+      inv.items = j.items || []; inv.ordq = j.ordq || {}; inv.exp[ym] = j.exp || { data: {}, from: {} }; inv.val[ym] = j.val || null; inv.log[ym] = j.log || [];
     } catch (e) { inv.error = e.message; }
     inv.loading = false;
     if (state.tab === 'inv' || state.tab === 'sales') P.render();
@@ -582,24 +582,27 @@
   const expOf = (st) => ((inv.exp[state.month] || {}).data || {})[st] || null;
   const expSum = (e) => (e ? EXP_FIELDS.reduce((a, [k]) => a + (Number(e[k]) || 0), 0) + (e.others || []).reduce((a, o) => a + (Number(o.amt) || 0), 0) : 0);
   const fromLabel = (ym) => { const [, m] = ym.split('-').map(Number); return `${m}月`; };
-  // 売上タブの粗利カードの下に純利益を出す
-  function salesNote(stores, profit) {
-    if (!inv.log[state.month] || !inv.exp[state.month]) { ensure(); return ''; }
+  // 売上タブのPL用：原価（仕入れ額±在庫の増減）と経費。読み込み中は null
+  function plData(stores) {
+    if (!inv.log[state.month] || !inv.exp[state.month]) { ensure(); return null; }
     const buy = monthPurchases(stores, state.month).reduce((a, e) => a + (e.total || 0), 0);
+    const v = inv.val[state.month];
+    const useStock = !!(v && v.hasHistory);
+    const sv = (o) => stores.reduce((a, st) => a + ((o || {})[st] || 0), 0);
+    const invStart = useStock ? sv(v.start) : 0, invEnd = useStock ? sv(v.end) : 0;
     const ex = stores.map((st) => expOf(st));
     const sumBy = (k) => ex.reduce((a, e) => a + (e ? Number(e[k]) || 0 : 0), 0);
     const others = ex.reduce((a, e) => a + (e ? (e.others || []).reduce((x, o) => x + (Number(o.amt) || 0), 0) : 0), 0);
-    const expTotal = ex.reduce((a, e) => a + expSum(e), 0);
-    const net = profit - buy - expTotal;
+    const expLines = [...EXP_FIELDS.map(([k, l]) => [l, sumBy(k)]), ['その他', others]].filter(([, x]) => x);
     const from = (inv.exp[state.month] || {}).from || {};
     const carried = stores.filter((st) => from[st]).map((st) => `${st.replace('店', '')}は${fromLabel(from[st])}`);
     const missing = stores.filter((st) => !expOf(st));
-    return `<div class="pl-row sub inv-note"><span>− 仕入れ額（在庫タブの仕入れ記録）</span><b>−${yen(buy)}</b></div>
-      <div class="pl-row sub inv-note"><span>− 経費 <button class="linkbtn" data-act="invexp">入力・変更</button></span><b>−${yen(expTotal)}</b></div>
-      ${EXP_FIELDS.map(([k, l]) => (sumBy(k) ? `<div class="pl-row sub inv-note exp-d"><span>${l}</span><b>${yen(sumBy(k))}</b></div>` : '')).join('')}
-      ${others ? `<div class="pl-row sub inv-note exp-d"><span>その他</span><b>${yen(others)}</b></div>` : ''}
-      <div class="pl-row total net ${net < 0 ? 'neg' : ''}"><span>純利益 <small>粗利 − 仕入れ額 − 経費</small></span><b>${yen(net)}</b></div>
-      ${missing.length ? `<div class="hint exp-h">${missing.join('・')}の経費が未入力です（「入力・変更」から）</div>` : carried.length ? `<div class="hint exp-h">${carried.join('・')}の金額を引き継いでいます</div>` : ''}`;
+    return {
+      buy, invStart, invEnd, useStock, endIsNow: !!(v && v.endIsNow), noPrice: v ? v.noPrice : 0,
+      cost: buy + invStart - invEnd,
+      expTotal: ex.reduce((a, e) => a + expSum(e), 0), expLines,
+      expNote: missing.length ? `${missing.join('・')}の経費が未入力です（「入力・変更」から）` : carried.length ? `${carried.join('・')}の金額を引き継いでいます` : '',
+    };
   }
   function openExp(store) {
     const stores = storesInView();
@@ -636,6 +639,6 @@
     catch (e) { toast(e.message); }
   }
 
-  window.LotusInv = { view: viewInv, act, salesNote };
+  window.LotusInv = { view: viewInv, act, plData };
   if (state.tab === 'inv' || state.tab === 'sales') P.render();
 })();
