@@ -40,10 +40,23 @@
   const ordQ = (it, s) => manQ(it, s) || 0;
   // 仕入れ管理に出す商品：発注が必要 or 手で数を入れた
   const inOrder = (it, stores) => stores.some((s) => low(it, s) || manQ(it, s) > 0);
+  // 入数：ネットで1回に買う単位（1ケース）に入っている数。入力がなければ仕入れ先の名前から読み取る（例「6本」「×30本」）
+  function packOf(it, sp) {
+    if (!sp || (it && it.unit === 'ケース')) return 1;
+    const p = Number(sp.pack); if (p >= 1) return p;
+    const u = (it && it.unit) || '本';
+    const m = [...String(sp.name || '').replace(/[０-９]/g, (d) => String.fromCharCode(d.charCodeAt(0) - 0xfee0)).matchAll(new RegExp('(\\d+)\\s*' + (u === '本' ? '本' : u.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')), 'g'))];
+    const n = m.length ? Number(m[m.length - 1][1]) : 1;
+    return n >= 2 && n <= 200 ? n : 1;
+  }
+  const isCase = (it, sp) => packOf(it, sp) > 1;
+  const ordUnit = (it, sp) => (isCase(it, sp) ? 'ケース' : it.unit || ''); // 発注・仕入れの単位
+  const perUnit = (it, sp) => sp.price / packOf(it, sp); // 1本（在庫の単位）あたりの値段
   function cheapest(it) {
     const xs = (it.suppliers || []).filter((s) => s.price != null && s.price > 0);
-    return xs.length ? xs.reduce((a, b) => (b.price < a.price ? b : a)) : null;
+    return xs.length ? xs.reduce((a, b) => (perUnit(it, b) < perUnit(it, a) ? b : a)) : null;
   }
+  const priceLabel = (it, c) => (isCase(it, c) ? `${yen(c.price)}/ケース(${packOf(it, c)}${esc(it.unit || '')})` : yen(c.price));
   // 到着予定：今日注文した場合（定期チェックで調べた「何日で届くか」から計算）
   const WD = ['日', '月', '火', '水', '木', '金', '土'];
   // cutoff（例 '13:00'）＝その時刻までの注文なら lead 日後に届く。過ぎたら翌日注文扱いで +1日
@@ -65,7 +78,7 @@
     const head = e.leftLabel ? `今日あと${e.leftLabel}以内の注文で` : e.late ? `締切${e.cutoff}過ぎ→明日注文で` : '今日注文→';
     return `<span class="eta ${e.leftLabel && /分$/.test(e.leftLabel) ? 'soon' : ''}" title="到着予定（${esc(e.at)} に確認${e.note ? '：' + esc(e.note) : ''}${e.cutoff ? `・締切 ${e.cutoff}` : ''}）">🚚 ${head}${e.leftLabel ? '→' : ''}${e.label}着</span>`;
   };
-  const unitCost = (it) => { const c = cheapest(it); return c ? c.price : null; };
+  const unitCost = (it) => { const c = cheapest(it); return c ? perUnit(it, c) : null; };
   const link = (u, t) => (u ? `<a href="${esc(u)}" target="_blank" rel="noopener noreferrer" class="linkbtn">${t}</a>` : t);
   const searchUrl = (name) => 'https://www.google.com/search?tbm=shop&q=' + encodeURIComponent(name);
   const todayStr = () => businessToday();
@@ -161,7 +174,7 @@
     return `<div class="inv-row ${inv.reorder ? 'mv' : ''}" data-id="${it.id}" data-s="${esc((it.name + ' ' + (it.location || '') + ' ' + (it.memo || '')).toLowerCase())}">
       ${mv}<button class="inv-main" data-act="invedit" data-id="${it.id}">
         <div class="inv-nm"><b>${esc(it.name)}</b>${isLow ? '<span class="badge bad">要仕入れ</span>' : ''}</div>
-        <div class="inv-sub">${it.location ? `📍${esc(it.location)}　` : ''}${c ? `最安 <b>${yen(c.price)}</b> ${esc(c.name)} ${etaTag(c)}` : '<span class="hint">仕入れ先未登録</span>'}</div>
+        <div class="inv-sub">${it.location ? `📍${esc(it.location)}　` : ''}${c ? `最安 <b>${priceLabel(it, c)}</b> ${esc(c.name)} ${etaTag(c)}` : '<span class="hint">仕入れ先未登録</span>'}</div>
       </button>
       <div class="inv-stocks">${st}</div>
       <div class="inv-acts">${c && c.url ? link(c.url, '購入') : ''}<button class="btn sm" data-act="invbuy" data-id="${it.id}">記録</button></div>
@@ -219,13 +232,13 @@
     </div>` : '';
     const head = `<div class="ord-head"><span></span>${stores.map((s) => `<span><i class="dot" style="background:${STORE_VAR[s]}"></i>${s.replace('店', '')}</span>`).join('')}${multi ? '<span>合計</span>' : ''}</div>`;
     const row = (it) => {
-      const c = cheapest(it); const u = esc(it.unit || ''); const sum = qtyOf(it);
-      const cell = (s) => { const q = needIn(it, s); const lw = low(it, s); const tip = `${s}：今 ${n2(stock(it, s))}${u}・最大 ${targetOf(it, s)}${u}（押すと発注数を入力・仕入れを記録）`; return q
-        ? `<button class="ord-q" data-act="invqty" data-id="${it.id}" data-store="${s}" title="${tip}"><b>${n2(q)}</b><small>${u}</small><em>今${n2(stock(it, s))}/${targetOf(it, s)}</em>${c ? `<i class="amt">${yen(q * c.price)}</i>` : ''}</button>`
-        : lw ? `<button class="ord-q none need" data-act="invqty" data-id="${it.id}" data-store="${s}" title="${tip}"><b>入力</b><em>今${n2(stock(it, s))}/${targetOf(it, s)}</em></button>`
+      const c = cheapest(it); const su = esc(it.unit || ''); const u = esc(ordUnit(it, c)); const sum = qtyOf(it);
+      const cell = (s) => { const q = needIn(it, s); const lw = low(it, s); const tip = `${s}：今 ${n2(stock(it, s))}${su}・最大 ${targetOf(it, s)}${su}（押すと発注数を入力・仕入れを記録）`; return q
+        ? `<button class="ord-q" data-act="invqty" data-id="${it.id}" data-store="${s}" title="${tip}"><b>${n2(q)}</b><small>${u}</small><em>今${n2(stock(it, s))}/${targetOf(it, s)}${su}</em>${c ? `<i class="amt">${yen(q * c.price)}</i>` : ''}</button>`
+        : lw ? `<button class="ord-q none need" data-act="invqty" data-id="${it.id}" data-store="${s}" title="${tip}"><b>入力</b><em>今${n2(stock(it, s))}/${targetOf(it, s)}${su}</em></button>`
         : `<button class="ord-q none" data-act="invqty" data-id="${it.id}" data-store="${s}" title="${tip}">—</button>`; };
       return `<div class="ord-row">
-        <div class="ord-nm"><b>${esc(it.name)}</b><div class="inv-sub">${c ? `最安 ${c.url && siteOf(c.url) ? `<span class="site-tag">${esc(siteOf(c.url))}</span>` : ''}${link(c.url, esc(c.name))} ${yen(c.price)}${sum ? ` × ${n2(sum)} ＝ <b>${yen(sum * c.price)}</b>` : ''} ${etaTag(c)}` : `<a class="linkbtn" target="_blank" rel="noopener noreferrer" href="${esc(searchUrl(it.name))}">ネットで最安を探す</a>`}</div></div>
+        <div class="ord-nm"><b>${esc(it.name)}</b><div class="inv-sub">${c ? `最安 ${c.url && siteOf(c.url) ? `<span class="site-tag">${esc(siteOf(c.url))}</span>` : ''}${link(c.url, esc(c.name))} ${priceLabel(it, c)}${sum ? ` × ${n2(sum)}${u} ＝ <b>${yen(sum * c.price)}</b>` : ''} ${etaTag(c)}` : `<a class="linkbtn" target="_blank" rel="noopener noreferrer" href="${esc(searchUrl(it.name))}">ネットで最安を探す</a>`}</div></div>
         ${stores.map(cell).join('')}
         ${multi ? (sum ? `<div class="ord-q sum"><b>${n2(sum)}</b><small>${u}</small>${c ? `<i class="amt">${yen(sum * c.price)}</i>` : ''}</div>` : '<span class="ord-q none" style="border:0">—</span>') : ''}
       </div>`;
@@ -301,13 +314,17 @@
   // ---------- 商品の追加・編集 ----------
   let draftSup = [];
   function supRows() {
-    const cmin = Math.min(...draftSup.filter((x) => Number(x.price) > 0).map((x) => Number(x.price)));
-    return draftSup.map((x, i) => `<div class="inv-sup">
+    const unit = $('#i-unit') ? $('#i-unit').value : '本';
+    const fake = { unit };
+    const pu = (x) => Number(x.price) / packOf(fake, { ...x, pack: x.pack === '' ? null : x.pack });
+    const cmin = Math.min(...draftSup.filter((x) => Number(x.price) > 0).map(pu));
+    return draftSup.map((x, i) => { const auto = packOf(fake, { name: x.name }); return `<div class="inv-sup">
       <input data-sup="${i}" data-k="name" placeholder="仕入れ先（例：Amazon・業務スーパー）" value="${esc(x.name)}">
-      <span class="yen-in"><input data-sup="${i}" data-k="price" type="number" inputmode="numeric" min="0" placeholder="値段（1${esc($('#i-unit') ? $('#i-unit').value : '')}あたり）" value="${x.price == null ? '' : x.price}"></span>
+      <span class="yen-in"><input data-sup="${i}" data-k="price" type="number" inputmode="numeric" min="0" placeholder="値段（1回に買う単位の値段）" value="${x.price == null ? '' : x.price}"></span>
+      <label class="inv-pack">入数<input data-sup="${i}" data-k="pack" type="number" inputmode="numeric" min="1" step="1" placeholder="${auto > 1 ? auto : 1}" value="${x.pack == null ? '' : x.pack}"><span>${esc(unit)}/回</span></label>
       <input data-sup="${i}" data-k="url" type="url" inputmode="url" placeholder="URL（任意）" value="${esc(x.url || '')}">
-      <div class="inv-sup-f">${Number(x.price) > 0 && Number(x.price) === cmin ? '<span class="badge ok">最安</span>' : ''}${x.url ? link(x.url, '開く') : ''}<button class="linkbtn" data-act="invsupdel" data-i="${i}">削除</button></div>
-    </div>`).join('') || '<div class="hint">まだありません</div>';
+      <div class="inv-sup-f">${Number(x.price) > 0 && pu(x) === cmin ? '<span class="badge ok">最安</span>' : ''}${x.url ? link(x.url, '開く') : ''}<button class="linkbtn" data-act="invsupdel" data-i="${i}">削除</button></div>
+    </div>`; }).join('') || '<div class="hint">まだありません</div>';
   }
   function openItem(id) {
     const it = id ? inv.items.find((x) => x.id === id) : null;
@@ -346,7 +363,7 @@
     document.querySelectorAll('[data-min]').forEach((el) => { if (el.value !== '') minStock[el.dataset.min] = Number(el.value); });
     const target = {}; document.querySelectorAll('[data-target]').forEach((el) => { if (el.value !== '') target[el.dataset.target] = Number(el.value); });
     document.querySelectorAll('[data-stock]').forEach((el) => { if (el.value !== '') stockV[el.dataset.stock] = Number(el.value); });
-    const item = { id: id || undefined, name: $('#i-name').value, category: $('#i-cat').value, unit: $('#i-unit').value, location: $('#i-loc').value, memo: $('#i-memo').value, minStock, target, stock: stockV, suppliers: draftSup.map((x) => ({ ...x, price: x.price === '' || x.price == null ? null : Number(x.price) })) };
+    const item = { id: id || undefined, name: $('#i-name').value, category: $('#i-cat').value, unit: $('#i-unit').value, location: $('#i-loc').value, memo: $('#i-memo').value, minStock, target, stock: stockV, suppliers: draftSup.map((x) => ({ ...x, price: x.price === '' || x.price == null ? null : Number(x.price), pack: x.pack === '' || x.pack == null ? null : Number(x.pack) })) };
     if (!item.name.trim()) { toast('商品名を入れてください'); return; }
     try { await api('invSave', { item, date: todayStr() }, true); closeSheet(); toast('保存しました'); await refresh(); }
     catch (e) { toast(e.message); }
@@ -367,6 +384,7 @@
     const sups = it.suppliers || [];
     const c = cheapest(it);
     const def = c || sups[0] || null;
+    const pk = packOf(it, def); const cu = pk > 1 ? 'ケース' : (it.unit || '');
     openSheet(`
       <div class="sh-h"><div><h2>仕入れを記録</h2><div class="sub">${esc(it.name)}</div></div>
         <button class="icon-btn x" data-act="close" aria-label="閉じる"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
@@ -374,28 +392,44 @@
         <div class="fld"><label>店舗</label><div class="chips">${STORES.map((s) => `<button type="button" class="chip-sel ${s === st ? 'on' : ''}" data-act="invbuystore" data-v="${s}">${s}<small style="margin-left:6px;opacity:.7">在庫 ${stock(it, s)}</small></button>`).join('')}</div></div>
         <div class="row2">
           <div class="fld"><label for="b-date">日付</label><input id="b-date" type="date" value="${todayStr()}"></div>
-          <div class="fld"><label for="b-qty">数量（${esc(it.unit || '')}）</label><input id="b-qty" type="number" inputmode="decimal" min="0" step="0.5" value="1"></div>
+          <div class="fld"><label for="b-qty" id="b-qty-l">数量（${esc(cu)}）</label><input id="b-qty" type="number" inputmode="decimal" min="0" step="${pk > 1 ? 1 : 0.5}" value="1"></div>
         </div>
         <div class="row2">
           <div class="fld"><label for="b-sup">仕入れ先</label><input id="b-sup" list="b-sups" value="${esc(def ? def.name : '')}" placeholder="例：業務スーパー"><datalist id="b-sups">${sups.map((s) => `<option value="${esc(s.name)}">${s.price ? yen(s.price) : ''}</option>`).join('')}</datalist></div>
-          <div class="fld"><label for="b-price">単価（円）</label><span class="yen-in"><input id="b-price" type="number" inputmode="numeric" min="0" value="${def && def.price ? def.price : ''}"></span></div>
+          <div class="fld"><label for="b-price" id="b-price-l">${pk > 1 ? '1ケースの値段' : '単価（円）'}</label><span class="yen-in"><input id="b-price" type="number" inputmode="numeric" min="0" value="${def && def.price ? def.price : ''}"></span></div>
         </div>
+        <div class="hint" id="b-pack"></div>
         <div class="pl-row total" style="border:0"><span>合計</span><b id="b-total">—</b></div>
         ${sups.length > 1 ? `<div class="hint">登録済みの値段：${sups.filter((s) => s.price).sort((a, b) => a.price - b.price).map((s) => `${esc(s.name)} ${yen(s.price)}`).join(' ／ ')}</div>` : ''}
         <div class="fld"><label for="b-memo">メモ（任意）</label><input id="b-memo" placeholder="例：セールで購入"></div>
       </div>
       <div class="sh-f"><button class="btn" data-act="close">閉じる</button><button class="btn primary" data-act="invbuysave" data-id="${it.id}">仕入れ済み</button></div>`);
     $('#sheet').dataset.store = st;
-    const upd = () => { const q = Number($('#b-qty').value) || 0, p = Number($('#b-price').value) || 0; $('#b-total').textContent = yen(Math.round(q * p)); };
+    $('#sheet').dataset.pack = pk;
+    const upd = () => {
+      const q = Number($('#b-qty').value) || 0, p = Number($('#b-price').value) || 0, k = Number($('#sheet').dataset.pack) || 1;
+      $('#b-total').textContent = yen(Math.round(q * p));
+      $('#b-pack').textContent = k > 1 ? `1ケース＝${k}${it.unit || ''}。在庫に ${n2(q * k)}${it.unit || ''} 追加されます` : '';
+    };
     $('#b-qty').addEventListener('input', upd); $('#b-price').addEventListener('input', upd);
-    $('#b-sup').addEventListener('input', () => { const s = sups.find((x) => x.name === $('#b-sup').value); if (s && s.price) { $('#b-price').value = s.price; upd(); } });
+    $('#b-sup').addEventListener('input', () => {
+      const s = sups.find((x) => x.name === $('#b-sup').value);
+      const k = packOf(it, s); $('#sheet').dataset.pack = k;
+      $('#b-qty-l').textContent = `数量（${k > 1 ? 'ケース' : it.unit || ''}）`; $('#b-price-l').textContent = k > 1 ? '1ケースの値段' : '単価（円）';
+      if (s && s.price) $('#b-price').value = s.price;
+      upd();
+    });
     upd();
   }
   async function saveBuy(id) {
     const store = $('#sheet').dataset.store;
-    const payload = { itemId: id, store, date: $('#b-date').value, qty: Number($('#b-qty').value), unitPrice: Number($('#b-price').value) || 0, supplier: $('#b-sup').value, memo: $('#b-memo').value };
-    if (!payload.qty) { toast('数量を入れてください'); return; }
-    try { await api('invPurchase', payload, true); closeSheet(); toast(`${store}に${payload.qty}追加しました`); await refresh(); }
+    const k = Number($('#sheet').dataset.pack) || 1;
+    const q = Number($('#b-qty').value), p = Number($('#b-price').value) || 0;
+    // ケースで買ったときは、在庫は本数（ケース×入数）で増やし、金額はケースの値段×ケース数
+    const payload = { itemId: id, store, date: $('#b-date').value, qty: q * k, unitPrice: k > 1 ? Math.round(p / k) : p, total: Math.round(q * p), supPrice: p, cases: k > 1 ? q : null, pack: k > 1 ? k : null, supplier: $('#b-sup').value, memo: $('#b-memo').value };
+    if (!q) { toast('数量を入れてください'); return; }
+    const it = inv.items.find((x) => x.id === id);
+    try { await api('invPurchase', payload, true); closeSheet(); toast(`${store}に${k > 1 ? `${q}ケース（${n2(q * k)}${(it && it.unit) || ''}）` : q}追加しました`); await refresh(); }
     catch (e) { toast(e.message); }
   }
 
@@ -416,20 +450,21 @@
     const it = inv.items.find((x) => x.id === id);
     if (!it) return;
     const u = esc(it.unit || ''); const c = cheapest(it);
+    const pk = packOf(it, c); const ou = esc(ordUnit(it, c));
     const man = manQ(it, store);
     const cur = man > 0 ? man : '';
     openSheet(`
       <div class="sh-h"><div><h2>発注数を入力</h2><div class="sub">${esc(it.name)}・${store}</div></div>
         <button class="icon-btn x" data-act="close" aria-label="閉じる"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
       <div class="sh-b">
-        <div class="hint">今の在庫 ${stock(it, store)}${u}・最大在庫数 ${targetOf(it, store)}${u}</div>
+        <div class="hint">今の在庫 ${stock(it, store)}${u}・最大在庫数 ${targetOf(it, store)}${u}${pk > 1 ? `<br>1ケース＝${pk}${u}・最大まで あと${n2(Math.max(0, targetOf(it, store) - stock(it, store)))}${u}（約${Math.ceil(Math.max(0, targetOf(it, store) - stock(it, store)) / pk)}ケース）` : ''}</div>
         <div class="qty-step">
           <button type="button" class="btn" data-act="invqtystep" data-d="-1" aria-label="1減らす">−</button>
           <input id="q-qty" type="number" inputmode="decimal" min="0" step="1" value="${cur}" placeholder="0">
           <button type="button" class="btn" data-act="invqtystep" data-d="1" aria-label="1増やす">＋</button>
-          <span class="u">${u}</span>
+          <span class="u">${ou}</span>
         </div>
-        <div class="pl-row total" style="border:0"><span>仕入れ予定金額${c ? `（${esc(c.name)} ${yen(c.price)}）` : ''}</span><b id="q-amt">—</b></div>
+        <div class="pl-row total" style="border:0"><span>仕入れ予定金額${c ? `（${esc(c.name)} ${priceLabel(it, c)}）` : ''}</span><b id="q-amt">—</b></div>
       </div>
       <div class="sh-f">${man > 0 ? `<button class="btn" data-act="invqtyauto" data-id="${it.id}" data-store="${store}">クリア</button>` : ''}<span class="spacer"></span>
         <button class="btn" data-act="invqtybuy" data-id="${it.id}" data-store="${store}">仕入れを記録</button>
@@ -460,11 +495,11 @@
     const items = ordered(inv.items.filter((it) => stores.some((s) => ordQ(it, s) > 0)));
     if (!items.length) { toast('発注数を入れてください'); return; }
     const rows = ordGroups(items).map(([cat, xs]) => `■${cat}\n` + xs.map((it) => {
-      const c = cheapest(it); const u = it.unit || '';
+      const c = cheapest(it); const u = ordUnit(it, c);
       const per = stores.map((s) => ordQ(it, s));
       const sum = n2(per.reduce((a, x) => a + x, 0));
       const parts = stores.length > 1 ? stores.map((s, k) => `${s.replace('店', '')}${per[k]}`).join(' ') + ` 計${sum}${u}` : `${sum}${u}`;
-      return `・${it.name} ${parts}${c ? ` ¥${Math.round(sum * c.price).toLocaleString('ja-JP')}（${c.name} ${c.price}円${c.url ? ' ' + c.url : ''}）` : ''}`;
+      return `・${it.name} ${parts}${c ? ` ¥${Math.round(sum * c.price).toLocaleString('ja-JP')}（${c.name} ${c.price}円${isCase(it, c) ? '/ケース' : ''}${c.url ? ' ' + c.url : ''}）` : ''}`;
     }).join('\n'));
     const amt = (s) => items.reduce((a, it) => { const c = cheapest(it); return a + (c ? Math.round(ordQ(it, s) * c.price) : 0); }, 0);
     const foot = '\n\n【仕入れ予定金額】' + (stores.length > 1 ? stores.map((s) => ` ${s.replace('店', '')} ¥${amt(s).toLocaleString('ja-JP')}`).join('') + ' ／' : '') + ` 合計 ¥${stores.reduce((a, s) => a + amt(s), 0).toLocaleString('ja-JP')}`;
