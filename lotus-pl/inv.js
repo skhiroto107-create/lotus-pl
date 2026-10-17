@@ -90,7 +90,7 @@
     const [, m] = state.month.split('-').map(Number);
     const tiles = `<div class="tiles">
       <div class="tile"><div class="k">商品数</div><div class="v">${items.length}<small>品</small></div><div class="s">${[...new Set(items.map((i) => i.category).filter(Boolean))].length} カテゴリ</div></div>
-      <div class="tile"><div class="k">要発注</div><div class="v ${lowCount ? 'negv' : ''}">${lowCount}<small>品</small></div><div class="s">発注ライン以下</div></div>
+      <div class="tile"><div class="k">要仕入れ</div><div class="v ${lowCount ? 'negv' : ''}">${lowCount}<small>品</small></div><div class="s">発注ライン以下</div></div>
       <div class="tile"><div class="k">${m}月の仕入れ額</div><div class="v">${yen(buy)}</div><div class="s">${monthPurchases(stores, state.month).length}件</div></div>
     </div>`;
     if (!items.length) {
@@ -139,7 +139,7 @@
     const mv = inv.reorder ? `<div class="inv-mv"><span class="inv-handle" data-id="${it.id}" aria-label="ドラッグで移動">≡</span><button class="icon-btn" data-act="invmove" data-id="${it.id}" data-d="-1" aria-label="上へ">↑</button><button class="icon-btn" data-act="invmove" data-id="${it.id}" data-d="1" aria-label="下へ">↓</button></div>` : '';
     return `<div class="inv-row ${inv.reorder ? 'mv' : ''}" data-id="${it.id}" data-s="${esc((it.name + ' ' + (it.location || '') + ' ' + (it.memo || '')).toLowerCase())}">
       ${mv}<button class="inv-main" data-act="invedit" data-id="${it.id}">
-        <div class="inv-nm"><b>${esc(it.name)}</b>${isLow ? '<span class="badge bad">要発注</span>' : ''}</div>
+        <div class="inv-nm"><b>${esc(it.name)}</b>${isLow ? '<span class="badge bad">要仕入れ</span>' : ''}</div>
         <div class="inv-sub">${it.location ? `📍${esc(it.location)}　` : ''}${c ? `最安 <b>${yen(c.price)}</b> ${esc(c.name)}` : '<span class="hint">仕入れ先未登録</span>'}</div>
       </button>
       <div class="inv-stocks">${st}</div>
