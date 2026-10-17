@@ -143,7 +143,7 @@
         <div class="inv-sub">${it.location ? `📍${esc(it.location)}　` : ''}${c ? `最安 <b>${yen(c.price)}</b> ${esc(c.name)}` : '<span class="hint">仕入れ先未登録</span>'}</div>
       </button>
       <div class="inv-stocks">${st}</div>
-      <div class="inv-acts">${c && c.url ? link(c.url, '買う') : ''}<button class="btn sm" data-act="invbuy" data-id="${it.id}">仕入れ</button></div>
+      <div class="inv-acts">${c && c.url ? link(c.url, '買う') : ''}<button class="btn sm" data-act="invbuy" data-id="${it.id}">記録</button></div>
     </div>`;
   }
 
