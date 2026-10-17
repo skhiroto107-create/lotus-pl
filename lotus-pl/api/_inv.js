@@ -47,6 +47,15 @@ async function loadExp(month) {
 }
 // 在庫金額（原価計算用）：月初と月末の在庫数 × 最安の値段（店舗ごと）
 // その日時点の在庫数 ＝ 今の在庫から、その日より後の記録（仕入れ・棚卸し・修正）を巻き戻して求める
+// 入数（1ケースに入っている数）：入力がなければ仕入れ先の名前の「6本」「×30本」から読み取る（inv.js と同じ考え方）
+function packOf(it, sp) {
+  if (!sp || (it && it.unit === 'ケース')) return 1;
+  const p = num(sp.pack); if (p >= 1) return p;
+  const u = (it && it.unit) || '本';
+  const m = [...String(sp.name || '').replace(/[０-９]/g, (d) => String.fromCharCode(d.charCodeAt(0) - 0xfee0)).matchAll(new RegExp('(\\d+)\\s*' + u.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'))];
+  const n = m.length ? Number(m[m.length - 1][1]) : 1;
+  return n >= 2 && n <= 200 ? n : 1;
+}
 const ymAdd = (ym, n) => { const [y, m] = ym.split('-').map(Number); return new Date(Date.UTC(y, m - 1 + n, 1)).toISOString().slice(0, 7); };
 const lastDay = (ym) => { const [y, m] = ym.split('-').map(Number); return new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10); };
 async function stockValue(month, items) {
@@ -58,7 +67,7 @@ async function stockValue(month, items) {
   const logs = vals.slice(0, after.length).flat().filter(Boolean).filter((e) => e.store && e.itemId && e.before != null);
   const hasHistory = vals.slice(after.length).some((v) => v && v.length);
   logs.sort((a, b) => (a.date + String(a.at)).localeCompare(b.date + String(b.at)));
-  const price = (it) => { const xs = (it.suppliers || []).filter((x) => x.price > 0).map((x) => x.price); return xs.length ? Math.min(...xs) : 0; };
+  const price = (it) => { const xs = (it.suppliers || []).filter((x) => x.price > 0).map((x) => x.price / packOf(it, x)); return xs.length ? Math.min(...xs) : 0; };
   const at = (cut) => { // cut 日の終わり時点
     const v = {};
     for (const st of L.STORES) v[st] = 0;
@@ -91,7 +100,7 @@ module.exports = {
     const i = item.id ? items.findIndex((x) => x.id === item.id) : -1;
     const prev = i >= 0 ? items[i] : null;
     const suppliers = (Array.isArray(item.suppliers) ? item.suppliers : []).slice(0, 12)
-      .map((s) => ({ id: s.id || newId('s'), name: str(s.name, 40), price: s.price === '' || s.price == null ? null : yenInt(s.price), url: cleanUrl(s.url), note: str(s.note, 60), updated: s.updated || '' }))
+      .map((s) => ({ id: s.id || newId('s'), name: str(s.name, 40), price: s.price === '' || s.price == null ? null : yenInt(s.price), pack: s.pack === '' || s.pack == null || !(num(s.pack) >= 1) ? null : Math.round(num(s.pack)), url: cleanUrl(s.url), note: str(s.note, 60), updated: s.updated || '' }))
       .filter((s) => s.name || s.url);
     // 到着日数（定期チェックで入る値）は、同じ仕入れ先・同じリンクなら引き継ぐ
     for (const s of suppliers) {
@@ -205,7 +214,8 @@ module.exports = {
   },
 
   // 仕入れを記録 → 在庫が増え、仕入れ先の値段も最新に
-  async invPurchase({ itemId, store, date, qty, unitPrice, supplier, memo }, { write }) {
+  // qty は在庫の単位（本など）。ケースで買ったときは total（支払った金額）と supPrice（1ケースの値段）も渡す
+  async invPurchase({ itemId, store, date, qty, unitPrice, total, supPrice, cases, pack, supplier, memo }, { write }) {
     write();
     if (!L.STORES.includes(store) || !L.isDate(date)) throw L.httpError(400, '店舗と日付を確認してください');
     const q = qty2(qty);
@@ -220,8 +230,9 @@ module.exports = {
     if (sup) {
       it.suppliers = it.suppliers || [];
       const s = it.suppliers.find((x) => x.name === sup);
-      if (s) { if (price) { s.price = price; s.updated = date; } }
-      else it.suppliers.push({ id: newId('s'), name: sup, price: price || null, url: '', note: '', updated: date });
+      const sp = supPrice != null && supPrice !== '' ? yenInt(supPrice) : price;
+      if (s) { if (sp) { s.price = sp; s.updated = date; } }
+      else it.suppliers.push({ id: newId('s'), name: sup, price: sp || null, pack: pack ? Math.round(num(pack)) : null, url: '', note: '', updated: date });
     }
     it.lastPurchase = date;
     // 仕入れたら、その店舗の手入力の発注数は自動に戻す
@@ -232,7 +243,7 @@ module.exports = {
       sets.push(['inv:ordq', Object.keys(oq).length ? oq : null]);
     }
     await L.setJSON(sets);
-    const entry = { id: newId('l'), type: 'purchase', date, store, ...snap(it), qty: q, unitPrice: price, total: Math.round(q * price), supplier: sup, memo: str(memo, 100), before, after: it.stock[store], at: Date.now() };
+    const entry = { id: newId('l'), type: 'purchase', date, store, ...snap(it), qty: q, unitPrice: price, total: total != null && total !== '' ? yenInt(total) : Math.round(q * price), cases: cases ? qty2(cases) : undefined, supplier: sup, memo: str(memo, 100), before, after: it.stock[store], at: Date.now() };
     await appendLog([entry]);
     return { item: it, entry };
   },
