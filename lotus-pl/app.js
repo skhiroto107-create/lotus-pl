@@ -216,9 +216,9 @@
 
   // ---------- daily ----------
   function sumOrders(orders) {
-    const s = { n: orders.length, guests: 0, newc: 0, rep: 0, normal: 0, late: 0, champagne: 0, medals: 0, discount: 0 };
+    const s = { n: orders.length, guests: 0, newc: 0, rep: 0, normal: 0, late: 0, champagne: 0, medals: 0, discount: 0, tickets: 0 };
     for (const o of orders) {
-      s.guests += nz(o.guests); s.normal += nz(o.normal); s.late += nz(o.late); s.champagne += nz(o.champagne); s.medals += nz(o.medals); s.discount += nz(o.discount);
+      s.guests += nz(o.guests); s.normal += nz(o.normal); s.late += nz(o.late); s.champagne += nz(o.champagne); s.medals += nz(o.medals); s.discount += nz(o.discount); s.tickets += nz(o.tickets);
       if (o.kind === '新規') s.newc += nz(o.guests) || 1; else if (o.kind === 'リピート') s.rep += nz(o.guests) || 1;
     }
     s.gross = s.normal + s.late + s.champagne;
@@ -266,7 +266,7 @@
       <div class="tile hero"><div class="k">日次売上（バック控除後）</div><div class="v">${yen(net)}</div><div class="s">通常 ${yen(os.normal)} ・ 開店後 ${yen(os.late)} ・ シャンパン ${yen(os.champagne)}</div></div>
       <div class="tile"><div class="k">会計 / 客数</div><div class="v">${os.n}<small>件</small> ${os.guests}<small>人</small></div><div class="s">新規 ${os.newc} ・ リピート ${os.rep}</div></div>
       <div class="tile"><div class="k">最終レジ金</div><div class="v">${yen(holder ? holder.finalCash : null)}</div><div class="s">スタート ${yen(cashRec ? cashRec.cash : null)}</div></div>
-      <div class="tile"><div class="k">スタッフ割引 / メダル</div><div class="v">${yen(os.discount)}</div><div class="s">メダル ${os.medals} 枚</div></div>
+      <div class="tile"><div class="k">スタッフ割引 / メダル</div><div class="v">${yen(os.discount)}</div><div class="s">メダル ${os.medals} 枚 ・ チケット ${os.tickets} 枚</div></div>
       <div class="tile"><div class="k">人件費</div><div class="v">${yen(rs.pay)}</div><div class="s">稼働 ${hrs(rs.hours)} ・ バック ${yen(rs.back)}</div></div>
     </div>`;
 
@@ -304,6 +304,7 @@
         <dt>シャンパン</dt><dd>${yen(os.champagne)}</dd>
         <dt>スタッフ割引</dt><dd>${yen(os.discount)}</dd>
         <dt>メダル</dt><dd>${os.medals} 枚</dd>
+        <dt>ドリンクチケット</dt><dd>${os.tickets} 枚</dd>
         <div class="sep"></div>
         <dt>スタッフバック</dt><dd>−${yen(rs.back)}</dd>
         <dt><b>日次売上</b></dt><dd>${yen(net)}</dd>
@@ -744,6 +745,7 @@
       <div class="tile"><div class="k">来店客数</div><div class="v">${os.guests}<small>人</small></div><div class="s">新規 ${os.newc} ・ リピート ${os.rep}</div></div>
       <div class="tile"><div class="k">客単価</div><div class="v">${os.guests ? yen((os.normal + os.late + os.champagne) / os.guests) : '—'}</div><div class="s">デジタル注文ベース</div></div>
       <div class="tile"><div class="k">人件費率</div><div class="v">${salesAll ? Math.round((rs.pay / salesAll) * 1000) / 10 + '<small>%</small>' : '—'}</div><div class="s">給料 ${yen(rs.pay)}</div></div>
+      <div class="tile"><div class="k">ドリンクチケット</div><div class="v">${os.tickets}<small>枚</small></div><div class="s">使用枚数（売上には入りません）</div></div>
     </div>
     ${plCard(stores, os, rs)}
     ${salesCalendar(stores, recs, orders)}`;
@@ -754,9 +756,9 @@
       <div class="card-b">${state.showTable ? salesTable(perDay, stores) : `<div class="chart" id="chart">${chartSvg(perDay, stores)}</div>`}</div></div>`;
 
     const breakdown = `<div class="card"><div class="card-h"><h3>店舗別の内訳</h3></div><div class="tbl-wrap"><table class="tbl" style="min-width:640px">
-      <thead><tr><th>店舗</th><th>売上</th><th>通常</th><th>開店後</th><th>シャンパン</th><th>割引</th><th>メダル</th><th>客数</th><th>人件費後</th><th>給料</th></tr></thead><tbody>
+      <thead><tr><th>店舗</th><th>売上</th><th>通常</th><th>開店後</th><th>シャンパン</th><th>割引</th><th>メダル</th><th>チケット</th><th>客数</th><th>人件費後</th><th>給料</th></tr></thead><tbody>
       ${stores.map((st) => { const a = sumRecords(recs.filter((r) => r.store === st)); const o = sumOrders(orders.filter((x) => x.store === st));
-        return `<tr><td><span class="nmcell"><span class="dot" style="background:${STORE_VAR[st]}"></span>${st}</span></td><td class="strong">${yen(o.gross)}</td><td>${yen(o.normal)}</td><td>${yen(o.late)}</td><td>${yen(o.champagne)}</td><td>${yen(o.discount)}</td><td>${o.medals}枚</td><td>${o.guests}人</td><td>${yen(grossProfit(o, a).profit)}</td><td>${yen(a.pay)}</td></tr>`; }).join('')}
+        return `<tr><td><span class="nmcell"><span class="dot" style="background:${STORE_VAR[st]}"></span>${st}</span></td><td class="strong">${yen(o.gross)}</td><td>${yen(o.normal)}</td><td>${yen(o.late)}</td><td>${yen(o.champagne)}</td><td>${yen(o.discount)}</td><td>${o.medals}枚</td><td>${o.tickets}枚</td><td>${o.guests}人</td><td>${yen(grossProfit(o, a).profit)}</td><td>${yen(a.pay)}</td></tr>`; }).join('')}
       </tbody></table></div></div>`;
     return tiles + chartCard + breakdown;
   }
