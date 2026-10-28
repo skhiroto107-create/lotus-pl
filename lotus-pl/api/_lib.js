@@ -161,6 +161,8 @@ function mapOrder(h, store, date) {
     normal: Number(h.normalSales) || 0, late: Number(h.lateNightSales) || 0,
     champagne: Number(h.champagneSales) || 0, medals: Number(h.medalCount) || 0,
     discount: Number(h.staffDiscount) || 0,
+    // ドリンクチケットの使用枚数（売上は0円。明細の「ドリンクチケット ¥0」の数を数える）
+    tickets: String(h.detail || '').split(' / ').filter((x) => /^\s*ドリンクチケット/.test(x)).length,
   };
 }
 
