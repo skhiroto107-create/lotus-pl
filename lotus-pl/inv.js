@@ -108,7 +108,7 @@
     const head = `<div class="inv-top">
       <div class="seg inv-seg" role="tablist">${VIEWS.map(([k, l]) => `<button class="${view === k ? 'on' : ''}" data-act="invview" data-v="${k}">${l}${k === 'order' && lowCount ? ` <span class="badge bad">${lowCount}</span>` : ''}</button>`).join('')}</div>
       <span class="spacer"></span>
-      <button class="btn" data-act="invrcpt" title="レシートや Amazon・楽天の購入履歴のスクショから仕入れを反映（複数枚OK）"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6M9 16h3"/></svg>レシート</button>
+      <button class="btn" data-act="invrcpt" title="レシートや Amazon・楽天の購入履歴のスクショから仕入れを反映（複数枚OK）"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6M9 16h3"/></svg>レシート・スクショ</button>
       <button class="btn primary" data-act="invedit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>商品を追加</button>
     </div>`;
     const body = view === 'order' ? viewOrder(stores) : view === 'history' ? viewHistory(stores) : view === 'count' ? viewCount() : viewList(stores, lowCount);
