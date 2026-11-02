@@ -84,7 +84,7 @@ async function stockValue(month, items) {
 }
 // レシートの写真をAIで読む（Gemini：無料枠あり／Claude：有料）。どちらも { shop, date, total, lines } を返す
 async function geminiRead(key, mt, data, prompt, schema) {
-  const models = [process.env.RECEIPT_MODEL, 'gemini-3.8-flash', 'gemini-3.5-flash-lite'].filter(Boolean);
+  const models = [process.env.RECEIPT_MODEL, 'gemini-3.8-flash', 'gemini-3.5-flash-lite', 'gemini-3.1-flash-lite'].filter(Boolean);
   let last = '';
   for (const model of models) {
     const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
@@ -97,7 +97,7 @@ async function geminiRead(key, mt, data, prompt, schema) {
     });
     const j = await r.json().catch(() => ({}));
     if (r.status === 429) throw L.httpError(429, '無料枠の上限に達しました。少し時間をおいてから読み取ってください');
-    if (!r.ok) { last = (j.error && j.error.message) || String(r.status); if (r.status === 404 || r.status === 400) continue; break; }
+    if (!r.ok) { last = (j.error && j.error.message) || String(r.status); continue; } // 混雑・未対応のモデルは次のモデルで試す
     const text = (((j.candidates || [])[0] || {}).content || {}).parts ? j.candidates[0].content.parts.map((p) => p.text || '').join('') : '';
     try { return JSON.parse(text.replace(/^```(?:json)?\s*|\s*```$/g, '')); } catch (e) { last = '読み取り結果を解釈できませんでした'; }
   }
