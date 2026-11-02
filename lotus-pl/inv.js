@@ -108,7 +108,7 @@
     const head = `<div class="inv-top">
       <div class="seg inv-seg" role="tablist">${VIEWS.map(([k, l]) => `<button class="${view === k ? 'on' : ''}" data-act="invview" data-v="${k}">${l}${k === 'order' && lowCount ? ` <span class="badge bad">${lowCount}</span>` : ''}</button>`).join('')}</div>
       <span class="spacer"></span>
-      <button class="btn" data-act="invrcpt" title="レシートの写真から仕入れを反映"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6M9 16h3"/></svg>レシート</button>
+      <button class="btn" data-act="invrcpt" title="レシートや Amazon・楽天の購入履歴のスクショから仕入れを反映（複数枚OK）"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6M9 16h3"/></svg>レシート</button>
       <button class="btn primary" data-act="invedit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>商品を追加</button>
     </div>`;
     const body = view === 'order' ? viewOrder(stores) : view === 'history' ? viewHistory(stores) : view === 'count' ? viewCount() : viewList(stores, lowCount);
@@ -439,18 +439,18 @@
   function pickReceipt() {
     let f = $('#rcpt-file');
     if (!f) {
-      f = document.createElement('input'); f.type = 'file'; f.accept = 'image/*'; f.id = 'rcpt-file'; f.hidden = true;
-      f.addEventListener('change', () => { const file = f.files && f.files[0]; f.value = ''; if (file) readReceipt(file); });
+      f = document.createElement('input'); f.type = 'file'; f.accept = 'image/*'; f.multiple = true; f.id = 'rcpt-file'; f.hidden = true;
+      f.addEventListener('change', () => { const files = [...(f.files || [])].slice(0, 6); f.value = ''; if (files.length) readReceipt(files); });
       document.body.append(f);
     }
     f.click();
   }
-  // 写真を縮小（長辺1600px・JPEG）してから送る
+  // 写真を縮小してから送る（横1280px・縦4096pxまで。縦長の購入履歴スクショも文字がつぶれないように）
   function shrink(file) {
     return new Promise((ok, ng) => {
       const url = URL.createObjectURL(file), img = new Image();
       img.onload = () => {
-        const k = Math.min(1, 1600 / Math.max(img.width, img.height));
+        const k = Math.min(1, 1280 / img.width, 4096 / img.height);
         const c = document.createElement('canvas'); c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
         c.getContext('2d').drawImage(img, 0, 0, c.width, c.height); URL.revokeObjectURL(url);
         ok(c.toDataURL('image/jpeg', 0.85));
@@ -460,15 +460,22 @@
     });
   }
   const sheetX = '<button class="icon-btn x" data-act="close" aria-label="閉じる"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>';
-  async function readReceipt(file) {
-    openSheet(`<div class="sh-h"><div><h2>レシート読み取り</h2><div class="sub">読み取り中…（10〜20秒ほど）</div></div>${sheetX}</div><div class="sh-b"><div class="skel" style="height:160px"></div></div>`);
+  // 複数枚（長い購入履歴を何枚かに分けたスクショなど）は順に読んで1つにまとめる
+  async function readReceipt(files) {
+    const sub = (i) => `読み取り中…${files.length > 1 ? `（${i + 1}/${files.length}枚目）` : '（10〜20秒ほど）'}`;
+    openSheet(`<div class="sh-h"><div><h2>レシート・購入履歴の読み取り</h2><div class="sub" id="rc-prog">${sub(0)}</div></div>${sheetX}</div><div class="sh-b"><div class="skel" style="height:160px"></div></div>`);
     try {
-      const image = await shrink(file);
-      const j = await api('invReceipt', { image, mediaType: 'image/jpeg' }, true);
-      rcpt = { ...j, store: storesInView()[0] };
+      let all = null;
+      for (let i = 0; i < files.length; i++) {
+        if ($('#rc-prog')) $('#rc-prog').textContent = sub(i);
+        const image = await shrink(files[i]);
+        const j = await api('invReceipt', { image, mediaType: 'image/jpeg' }, true);
+        all = all ? { ...all, shop: all.shop || j.shop, date: all.date || j.date, total: (all.total || 0) + (j.total || 0), lines: [...all.lines, ...j.lines] } : j;
+      }
+      rcpt = { ...all, store: storesInView()[0] };
       openReceipt();
     } catch (e) {
-      openSheet(`<div class="sh-h"><div><h2>レシート読み取り</h2></div>${sheetX}</div><div class="sh-b"><div class="err">${esc(e.message)}</div></div><div class="sh-f"><button class="btn" data-act="close">閉じる</button><button class="btn primary" data-act="invrcpt">撮り直す</button></div>`);
+      openSheet(`<div class="sh-h"><div><h2>レシート・購入履歴の読み取り</h2></div>${sheetX}</div><div class="sh-b"><div class="err">${esc(e.message)}</div></div><div class="sh-f"><button class="btn" data-act="close">閉じる</button><button class="btn primary" data-act="invrcpt">撮り直す</button></div>`);
     }
   }
   function openReceipt() {
@@ -508,7 +515,7 @@
     const on = rows.filter((x) => x.itemId && x.qty > 0);
     const sum = on.reduce((a, x) => a + x.amount, 0), off = rows.filter((x) => !x.itemId).reduce((a, x) => a + x.amount, 0);
     $('#rc-sum').textContent = `${yen(sum)}（${on.length}品）`;
-    $('#rc-note').textContent = [rcpt.total ? `レシート合計 ${yen(rcpt.total)}` : '', off ? `反映しない行 ${yen(off)}（在庫にない商品は「商品を追加」してから選べます）` : ''].filter(Boolean).join(' ／ ');
+    $('#rc-note').textContent = [rcpt.total ? `読み取った合計 ${yen(rcpt.total)}` : '', off ? `反映しない行 ${yen(off)}（在庫にない商品は「商品を追加」してから選べます）` : ''].filter(Boolean).join(' ／ ');
   }
   async function saveReceipt() {
     const lines = readReceiptRows().filter((x) => x.itemId && x.qty > 0);
