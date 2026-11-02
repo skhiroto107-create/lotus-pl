@@ -297,7 +297,8 @@ module.exports = {
     const items = await loadItems();
     const list = items.map((it) => {
       const packs = [...new Set((it.suppliers || []).map((sp) => packOf(it, sp)).filter((n) => n > 1))];
-      return `${it.id}\t${it.name}\t単位:${it.unit || '本'}${packs.length ? `\t1ケース=${packs.join('/')}${it.unit || '本'}` : ''}`;
+      const sups = (it.suppliers || []).map((sp) => sp.name).filter(Boolean).slice(0, 4);
+      return `${it.id}\t${it.name}\t単位:${it.unit || '本'}${packs.length ? `\t1ケース=${packs.join('/')}${it.unit || '本'}` : ''}${sups.length ? `\t仕入れ先の商品名:${sups.join(' | ')}` : ''}`;
     }).join('\n');
     const tool = {
       name: 'receipt',
@@ -305,9 +306,9 @@ module.exports = {
       input_schema: {
         type: 'object',
         properties: {
-          shop: { type: 'string', description: '店名（例：業務スーパー）' },
-          date: { type: 'string', description: '購入日 YYYY-MM-DD（読めなければ空）' },
-          total: { type: 'integer', description: 'レシートの合計金額（税込）' },
+          shop: { type: 'string', description: '店名・サイト名（例：業務スーパー、Amazon）' },
+          date: { type: 'string', description: '購入日・注文日 YYYY-MM-DD（読めなければ空）' },
+          total: { type: 'integer', description: 'レシート・注文の合計金額（税込）' },
           lines: { type: 'array', items: { type: 'object', properties: {
             text: { type: 'string', description: 'レシートに書かれた品名' },
             itemId: { type: 'string', description: '在庫の商品一覧で同じ商品のID。該当なしは空' },
@@ -318,12 +319,14 @@ module.exports = {
         required: ['shop', 'date', 'total', 'lines'],
       },
     };
-    const prompt = `バーの仕入れのレシートです。品目ごとに読み取って返してください。
-・下の「在庫の商品一覧」に同じ商品があれば itemId を入れる（銘柄・容量が違うものは入れない）。なければ空。
-・qty は在庫の単位で数える。ケースや「×24」などの入数があれば本数に直す。
-・amount は税込・値引き後の金額。外税のレシートは税を各行に按分して、合計が total と合うようにする。
-・小計・合計・税・ポイント・釣銭などは lines に入れない。
-在庫の商品一覧（ID・名前・単位）：
+    const prompt = `バーの仕入れの記録です。お店のレシート、または Amazon・楽天市場などネット通販の注文履歴・注文詳細のスクリーンショットです。商品ごとに読み取って返してください。
+・shop はお店の名前。ネット通販なら「Amazon」「楽天市場（ショップ名）」のようにする。date はレシートの日付／注文日。
+・下の「在庫の商品一覧」に同じ商品があれば itemId を入れる（名前や「仕入れ先の商品名」と銘柄・容量が同じもの。違うものは入れない）。なければ空。
+・qty は在庫の単位で数える。ケースや「×24」「24本入」などの入数があれば、注文数×入数で本数に直す。
+・amount は税込・値引き後の金額。外税のレシートは税を各行に按分する。送料・手数料は商品の金額に按分して含める。クーポン値引きは引く。ポイント利用は支払い方法なので引かない。
+・小計・合計・税・ポイント・釣銭・送料だけの行などは lines に入れない。キャンセル・返品された注文や、明らかに仕入れではない注文は入れない。
+・スクリーンショットに複数の注文が写っていれば、すべての注文の商品を lines に入れ、total はその合計にする。
+在庫の商品一覧（ID・名前・単位・仕入れ先の商品名）：
 ${list || '（なし）'}`;
     const out = gkey ? await geminiRead(gkey, mt, data, prompt, tool.input_schema) : await claudeRead(key, mt, data, prompt, tool);
     const ids = new Set(items.map((x) => x.id));
