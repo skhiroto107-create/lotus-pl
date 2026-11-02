@@ -3,6 +3,7 @@
 //   inv:items        … 商品の一覧（店舗ごとの在庫数と発注ライン、仕入れ先ごとの値段）
 //   inv:log:{YYYY-MM} … その月の仕入れ・棚卸し・在庫修正の記録
 //   inv:ordq          … 発注リストで手で変えた発注数 { 商品id: { 店舗: 数 } }（仕入れを記録すると自動に戻る）
+// レシート読み取り（invReceipt）は GEMINI_API_KEY（Gemini・無料枠）を使う。なければ ANTHROPIC_API_KEY（Claude）
 const L = require('./_lib');
 
 const newId = (p) => p + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
@@ -81,6 +82,42 @@ async function stockValue(month, items) {
   const isNow = month >= nowYm;
   return { start: at(lastDay(ymAdd(month, -1))), end: at(lastDay(month)), hasHistory, endIsNow: isNow, noPrice: items.filter((it) => !price(it)).length };
 }
+// レシートの写真をAIで読む（Gemini：無料枠あり／Claude：有料）。どちらも { shop, date, total, lines } を返す
+async function geminiRead(key, mt, data, prompt, schema) {
+  const models = [process.env.RECEIPT_MODEL, 'gemini-3.8-flash', 'gemini-3.5-flash-lite'].filter(Boolean);
+  let last = '';
+  for (const model of models) {
+    const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-goog-api-key': key },
+      body: JSON.stringify({
+        contents: [{ role: 'user', parts: [{ inlineData: { mimeType: mt, data } }, { text: prompt + '\n\n次の JSON スキーマに合う JSON だけを返してください：\n' + JSON.stringify(schema) }] }],
+        generationConfig: { responseMimeType: 'application/json', temperature: 0 },
+      }),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (r.status === 429) throw L.httpError(429, '無料枠の上限に達しました。少し時間をおいてから読み取ってください');
+    if (!r.ok) { last = (j.error && j.error.message) || String(r.status); if (r.status === 404 || r.status === 400) continue; break; }
+    const text = (((j.candidates || [])[0] || {}).content || {}).parts ? j.candidates[0].content.parts.map((p) => p.text || '').join('') : '';
+    try { return JSON.parse(text.replace(/^```(?:json)?\s*|\s*```$/g, '')); } catch (e) { last = '読み取り結果を解釈できませんでした'; }
+  }
+  throw L.httpError(502, 'AIの読み取りに失敗しました：' + last);
+}
+async function claudeRead(key, mt, data, prompt, tool) {
+  const r = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01' },
+    body: JSON.stringify({
+      model: process.env.RECEIPT_MODEL || 'claude-sonnet-5-5', max_tokens: 4000,
+      tools: [tool], tool_choice: { type: 'tool', name: 'receipt' },
+      messages: [{ role: 'user', content: [{ type: 'image', source: { type: 'base64', media_type: mt, data } }, { type: 'text', text: prompt }] }],
+    }),
+  });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw L.httpError(502, 'AIの読み取りに失敗しました：' + ((j.error && j.error.message) || r.status));
+  return ((j.content || []).find((c) => c.type === 'tool_use') || {}).input || {};
+}
+
 const snap = (it) => ({ itemId: it.id, name: it.name, category: it.category || '', unit: it.unit || '' });
 
 module.exports = {
@@ -246,6 +283,79 @@ module.exports = {
     const entry = { id: newId('l'), type: 'purchase', date, store, ...snap(it), qty: q, unitPrice: price, total: total != null && total !== '' ? yenInt(total) : Math.round(q * price), cases: cases ? qty2(cases) : undefined, supplier: sup, memo: str(memo, 100), before, after: it.stock[store], at: Date.now() };
     await appendLog([entry]);
     return { item: it, entry };
+  },
+
+  // レシート読み取り（AI）：写真から品目・数量・金額を読み、在庫の商品と紐付けた候補を返す（まだ保存しない）
+  // 環境変数 GEMINI_API_KEY（Google AI Studio で無料発行）または ANTHROPIC_API_KEY が必要（任意で RECEIPT_MODEL）
+  async invReceipt({ image, mediaType }, { write }) {
+    write();
+    const gkey = process.env.GEMINI_API_KEY, key = process.env.ANTHROPIC_API_KEY;
+    if (!gkey && !key) throw L.httpError(400, 'レシート読み取りの設定がまだです（Vercel に GEMINI_API_KEY を登録してください）');
+    const mt = /^image\/(jpeg|png|webp|gif)$/.test(String(mediaType)) ? mediaType : 'image/jpeg';
+    const data = String(image || '').replace(/^data:[^,]*,/, '');
+    if (!data || data.length > 6e6) throw L.httpError(400, '画像を読み込めませんでした');
+    const items = await loadItems();
+    const list = items.map((it) => {
+      const packs = [...new Set((it.suppliers || []).map((sp) => packOf(it, sp)).filter((n) => n > 1))];
+      return `${it.id}\t${it.name}\t単位:${it.unit || '本'}${packs.length ? `\t1ケース=${packs.join('/')}${it.unit || '本'}` : ''}`;
+    }).join('\n');
+    const tool = {
+      name: 'receipt',
+      description: 'レシートの読み取り結果',
+      input_schema: {
+        type: 'object',
+        properties: {
+          shop: { type: 'string', description: '店名（例：業務スーパー）' },
+          date: { type: 'string', description: '購入日 YYYY-MM-DD（読めなければ空）' },
+          total: { type: 'integer', description: 'レシートの合計金額（税込）' },
+          lines: { type: 'array', items: { type: 'object', properties: {
+            text: { type: 'string', description: 'レシートに書かれた品名' },
+            itemId: { type: 'string', description: '在庫の商品一覧で同じ商品のID。該当なしは空' },
+            qty: { type: 'number', description: '在庫の単位での数量（ケースで買ったら ケース数×入数）' },
+            amount: { type: 'integer', description: 'この行の支払金額（税込・値引き後）' },
+          }, required: ['text', 'itemId', 'qty', 'amount'] } },
+        },
+        required: ['shop', 'date', 'total', 'lines'],
+      },
+    };
+    const prompt = `バーの仕入れのレシートです。品目ごとに読み取って返してください。
+・下の「在庫の商品一覧」に同じ商品があれば itemId を入れる（銘柄・容量が違うものは入れない）。なければ空。
+・qty は在庫の単位で数える。ケースや「×24」などの入数があれば本数に直す。
+・amount は税込・値引き後の金額。外税のレシートは税を各行に按分して、合計が total と合うようにする。
+・小計・合計・税・ポイント・釣銭などは lines に入れない。
+在庫の商品一覧（ID・名前・単位）：
+${list || '（なし）'}`;
+    const out = gkey ? await geminiRead(gkey, mt, data, prompt, tool.input_schema) : await claudeRead(key, mt, data, prompt, tool);
+    const ids = new Set(items.map((x) => x.id));
+    const lines = (Array.isArray(out.lines) ? out.lines : []).slice(0, 80).map((x) => ({
+      text: str(x.text, 60), itemId: ids.has(x.itemId) ? x.itemId : '', qty: qty2(x.qty), amount: yenInt(x.amount),
+    }));
+    return { shop: str(out.shop, 40), date: L.isDate(out.date) ? out.date : '', total: yenInt(out.total), lines };
+  },
+  // レシートの内容をまとめて反映：在庫を増やし、仕入れ（金額）として記録する
+  async invReceiptApply({ store, date, shop, lines }, { write }) {
+    write();
+    if (!L.STORES.includes(store) || !L.isDate(date)) throw L.httpError(400, '店舗と日付を確認してください');
+    const items = await loadItems();
+    const [oq] = await L.getJSON(['inv:ordq']);
+    const sup = str(shop, 40), entries = [];
+    let oqChanged = false;
+    for (const ln of (Array.isArray(lines) ? lines : []).slice(0, 80)) {
+      const it = items.find((x) => x.id === ln.itemId);
+      const q = qty2(ln.qty), total = yenInt(ln.amount);
+      if (!it || !q) continue;
+      const before = num((it.stock || {})[store]);
+      it.stock = { ...(it.stock || {}), [store]: Math.round((before + q) * 100) / 100 };
+      it.lastPurchase = date;
+      if (oq && oq[it.id] && oq[it.id][store] != null) { delete oq[it.id][store]; if (!Object.keys(oq[it.id]).length) delete oq[it.id]; oqChanged = true; }
+      entries.push({ id: newId('l'), type: 'purchase', date, store, ...snap(it), qty: q, unitPrice: Math.round(total / q), total, supplier: sup, memo: 'レシート', before, after: it.stock[store], at: Date.now() });
+    }
+    if (!entries.length) throw L.httpError(400, '反映する商品がありません');
+    const sets = [['inv:items', items]];
+    if (oqChanged) sets.push(['inv:ordq', Object.keys(oq).length ? oq : null]);
+    await L.setJSON(sets);
+    await appendLog(entries);
+    return { count: entries.length, total: entries.reduce((a, e) => a + e.total, 0) };
   },
 
   // 棚卸し：数え直した数で在庫を上書きし、差（使った量・ロス）を記録
