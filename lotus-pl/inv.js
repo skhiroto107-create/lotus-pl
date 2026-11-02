@@ -108,6 +108,7 @@
     const head = `<div class="inv-top">
       <div class="seg inv-seg" role="tablist">${VIEWS.map(([k, l]) => `<button class="${view === k ? 'on' : ''}" data-act="invview" data-v="${k}">${l}${k === 'order' && lowCount ? ` <span class="badge bad">${lowCount}</span>` : ''}</button>`).join('')}</div>
       <span class="spacer"></span>
+      <button class="btn" data-act="invrcpt" title="レシートの写真から仕入れを反映"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6M9 16h3"/></svg>レシート</button>
       <button class="btn primary" data-act="invedit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>商品を追加</button>
     </div>`;
     const body = view === 'order' ? viewOrder(stores) : view === 'history' ? viewHistory(stores) : view === 'count' ? viewCount() : viewList(stores, lowCount);
@@ -433,6 +434,91 @@
     catch (e) { toast(e.message); }
   }
 
+  // ---------- レシート読み取り（AI） ----------
+  let rcpt = null;
+  function pickReceipt() {
+    let f = $('#rcpt-file');
+    if (!f) {
+      f = document.createElement('input'); f.type = 'file'; f.accept = 'image/*'; f.id = 'rcpt-file'; f.hidden = true;
+      f.addEventListener('change', () => { const file = f.files && f.files[0]; f.value = ''; if (file) readReceipt(file); });
+      document.body.append(f);
+    }
+    f.click();
+  }
+  // 写真を縮小（長辺1600px・JPEG）してから送る
+  function shrink(file) {
+    return new Promise((ok, ng) => {
+      const url = URL.createObjectURL(file), img = new Image();
+      img.onload = () => {
+        const k = Math.min(1, 1600 / Math.max(img.width, img.height));
+        const c = document.createElement('canvas'); c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height); URL.revokeObjectURL(url);
+        ok(c.toDataURL('image/jpeg', 0.85));
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); ng(new Error('画像を開けませんでした')); };
+      img.src = url;
+    });
+  }
+  const sheetX = '<button class="icon-btn x" data-act="close" aria-label="閉じる"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>';
+  async function readReceipt(file) {
+    openSheet(`<div class="sh-h"><div><h2>レシート読み取り</h2><div class="sub">読み取り中…（10〜20秒ほど）</div></div>${sheetX}</div><div class="sh-b"><div class="skel" style="height:160px"></div></div>`);
+    try {
+      const image = await shrink(file);
+      const j = await api('invReceipt', { image, mediaType: 'image/jpeg' }, true);
+      rcpt = { ...j, store: storesInView()[0] };
+      openReceipt();
+    } catch (e) {
+      openSheet(`<div class="sh-h"><div><h2>レシート読み取り</h2></div>${sheetX}</div><div class="sh-b"><div class="err">${esc(e.message)}</div></div><div class="sh-f"><button class="btn" data-act="close">閉じる</button><button class="btn primary" data-act="invrcpt">撮り直す</button></div>`);
+    }
+  }
+  function openReceipt() {
+    const r = rcpt;
+    const opts = [...inv.items].sort((a, b) => a.name.localeCompare(b.name, 'ja'));
+    const row = (ln, i) => `<div class="rc-row" data-ri="${i}">
+        <div class="rc-t">${esc(ln.text || '（品名なし）')}</div>
+        <select data-rk="itemId"><option value="">反映しない</option>${opts.map((it) => `<option value="${it.id}" ${it.id === ln.itemId ? 'selected' : ''}>${esc(it.name)}</option>`).join('')}</select>
+        <span class="rc-q"><input data-rk="qty" type="number" inputmode="decimal" min="0" step="0.5" value="${ln.qty || ''}"><small data-ru="${i}">${esc(unitOf(ln.itemId))}</small></span>
+        <span class="yen-in"><input data-rk="amount" type="number" inputmode="numeric" min="0" value="${ln.amount || ln.amount === 0 ? ln.amount : ''}"></span>
+      </div>`;
+    openSheet(`
+      <div class="sh-h"><div><h2>レシートの内容を確認</h2><div class="sub">商品・数量・金額を直してから反映できます</div></div>${sheetX}</div>
+      <div class="sh-b rc">
+        <div class="fld"><label>店舗</label><div class="chips">${STORES.map((s) => `<button type="button" class="chip-sel ${s === r.store ? 'on' : ''}" data-act="invrcptstore" data-v="${s}">${s}</button>`).join('')}</div></div>
+        <div class="row2">
+          <div class="fld"><label for="rc-date">日付</label><input id="rc-date" type="date" value="${r.date || todayStr()}"></div>
+          <div class="fld"><label for="rc-shop">仕入れ先</label><input id="rc-shop" value="${esc(r.shop || '')}" placeholder="例：業務スーパー"></div>
+        </div>
+        <div class="rc-list">${r.lines.length ? r.lines.map(row).join('') : '<div class="hint">品目を読み取れませんでした</div>'}</div>
+        <div class="pl-row total" style="border:0"><span>反映する仕入れ金額</span><b id="rc-sum">—</b></div>
+        <div class="hint" id="rc-note"></div>
+      </div>
+      <div class="sh-f"><button class="btn" data-act="invrcpt">撮り直す</button><button class="btn primary" data-act="invrcptsave">在庫に反映</button></div>`);
+    updReceipt();
+  }
+  const unitOf = (id) => { const it = inv.items.find((x) => x.id === id); return it ? it.unit || '本' : ''; };
+  function readReceiptRows() {
+    return [...document.querySelectorAll('.rc-row')].map((el) => ({
+      itemId: el.querySelector('[data-rk="itemId"]').value,
+      qty: Number(el.querySelector('[data-rk="qty"]').value) || 0,
+      amount: Number(el.querySelector('[data-rk="amount"]').value) || 0,
+    }));
+  }
+  function updReceipt() {
+    const rows = readReceiptRows(); if (!rcpt || !$('#rc-sum')) return;
+    const on = rows.filter((x) => x.itemId && x.qty > 0);
+    const sum = on.reduce((a, x) => a + x.amount, 0), off = rows.filter((x) => !x.itemId).reduce((a, x) => a + x.amount, 0);
+    $('#rc-sum').textContent = `${yen(sum)}（${on.length}品）`;
+    $('#rc-note').textContent = [rcpt.total ? `レシート合計 ${yen(rcpt.total)}` : '', off ? `反映しない行 ${yen(off)}（在庫にない商品は「商品を追加」してから選べます）` : ''].filter(Boolean).join(' ／ ');
+  }
+  async function saveReceipt() {
+    const lines = readReceiptRows().filter((x) => x.itemId && x.qty > 0);
+    if (!lines.length) { toast('反映する商品を選んでください'); return; }
+    try {
+      const j = await api('invReceiptApply', { store: rcpt.store, date: $('#rc-date').value || todayStr(), shop: $('#rc-shop').value, lines }, true);
+      closeSheet(); rcpt = null; toast(`${j.count}品を在庫に追加し、仕入れ ${yen(j.total)} を記録しました`); await refresh();
+    } catch (e) { toast(e.message); }
+  }
+
   async function saveCount() {
     const counts = {};
     document.querySelectorAll('[data-cnt]').forEach((el) => { if (el.value !== '') counts[el.dataset.cnt] = Number(el.value); });
@@ -564,6 +650,7 @@
   document.addEventListener('pointerup', endDrag);
   document.addEventListener('pointercancel', endDrag);
   document.addEventListener('change', (e) => {
+    if (e.target.dataset && e.target.dataset.rk === 'itemId') { const row = e.target.closest('.rc-row'); const u = row && row.querySelector('[data-ru]'); if (u) u.textContent = unitOf(e.target.value); updReceipt(); }
     if (e.target.id === 'inv-sort') { sortBy = e.target.value; try { localStorage.setItem(LSS, sortBy); } catch (x) {} P.render(); }
   });
 
@@ -582,6 +669,9 @@
       case 'invbuysave': saveBuy(b.dataset.id); break;
       case 'invcntstore': inv.countStore = b.dataset.v; P.render(); break;
       case 'invcountsave': saveCount(); break;
+      case 'invrcpt': pickReceipt(); break;
+      case 'invrcptstore': if (rcpt) rcpt.store = b.dataset.v; b.parentElement.querySelectorAll('.chip-sel').forEach((x) => x.classList.toggle('on', x === b)); break;
+      case 'invrcptsave': saveReceipt(); break;
       case 'invlogdel': delLog(b.dataset.id); break;
       case 'invcopy': copyOrder(); break;
       case 'invexp': openExp(); break;
@@ -610,6 +700,7 @@
     }
     if (t.dataset && t.dataset.sup !== undefined && t.dataset.k === 'price') { readSup(); }
     if (t.dataset && (t.dataset.ek || t.dataset.oa !== undefined)) updExp();
+    if (t.dataset && t.dataset.rk) updReceipt();
   });
 
   // ---------- 純利益（粗利 − 仕入れ額 − 経費） ----------
