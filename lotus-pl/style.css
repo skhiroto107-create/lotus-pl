@@ -511,3 +511,12 @@ a.linkbtn[href]:active{opacity:.6}
 .inv-pack{grid-column:1/-1;display:flex;align-items:center;gap:8px;font-size:12px;font-weight:600;color:var(--ink-2)}
 .inv-pack input{width:90px!important;flex:none}
 .inv-pack span{color:var(--ink-3);font-weight:500}
+
+/* レシート読み取り */
+.sheet:has(.rc){width:min(720px,100%)}
+.rc-list{display:flex;flex-direction:column;gap:8px}
+.rc-row{display:grid;grid-template-columns:1fr 110px 110px;gap:6px 8px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line)}
+.rc-t{grid-column:1/-1;font-size:13px;color:var(--ink-3)}
+.rc-row select,.rc-row input{background:var(--surface-2);border:1px solid var(--line);border-radius:10px;padding:9px 10px;font-size:16px;width:100%;min-width:0}
+.rc-q{display:flex;align-items:center;gap:4px}.rc-q small{color:var(--ink-3);white-space:nowrap}
+@media (max-width:520px){.rc-row{grid-template-columns:1fr 1fr}.rc-row select{grid-column:1/-1}}
