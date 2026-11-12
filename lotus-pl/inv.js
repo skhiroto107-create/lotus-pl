@@ -7,7 +7,9 @@
   if (!P) return;
   const { state, api, openSheet, closeSheet, toast, esc, yen, STORES, STORE_VAR, businessToday, storesInView, dayLabel, $ } = P;
 
-  const CATS = ['酒', '割材・ソフトドリンク', 'フード', '消耗品', '備品', 'その他'];
+  // カテゴリ（この順に並ぶ）。お酒は種類ごと、割材とソフトドリンクも分ける
+  const CATS = ['ビール', 'ウイスキー', '焼酎', 'スピリッツ', 'リキュール', 'ワイン・シャンパン', '割材', 'ソフトドリンク', 'フード', '消耗品', '備品', 'その他'];
+  const catRank = (c) => { const i = CATS.indexOf(c || 'その他'); return i < 0 ? CATS.length : i; };
   const UNITS = ['本', '個', '袋', '箱', 'kg', 'L', 'パック', 'ケース'];
   const VIEWS = [['list', '在庫一覧'], ['order', '仕入れ管理'], ['history', '仕入れ履歴'], ['count', '棚卸し']];
   const LSV = 'lotus_inv_view';
@@ -287,26 +289,30 @@
     const stores = storesInView();
     if (!inv.countStore || !stores.includes(inv.countStore)) inv.countStore = stores[0];
     const s = inv.countStore;
-    const items = sortBy === 'cat' ? ordered(inv.items).sort((a, b) => (CATS.indexOf(a.category) + 99) % 99 - (CATS.indexOf(b.category) + 99) % 99) : sortBy === 'name' ? [...inv.items].sort((a, b) => a.name.localeCompare(b.name, 'ja')) : ordered(inv.items);
+    // 棚卸しはいつもカテゴリごとにまとめる（カテゴリの中は自分の並び順／名前順）
+    const inCat = sortBy === 'name' ? [...inv.items].sort((a, b) => a.name.localeCompare(b.name, 'ja')) : ordered(inv.items);
+    const items = inCat.map((it, i) => [it, i]).sort((a, b) => catRank(a[0].category) - catRank(b[0].category) || a[1] - b[1]).map(([it]) => it);
     if (!items.length) return '<div class="card"><div class="empty"><b>商品がまだありません</b>先に「商品を追加」から登録してください。</div></div>';
-    let cat = '';
-    const rows = items.map((it) => {
-      const h = (it.category || 'その他') !== cat ? `<div class="grp-h inv-cat">${esc((cat = it.category || 'その他'))}</div>` : '';
-      const last = (it.lastCount || {})[s];
-      return h + `<div class="inv-cnt">
+    const cats = [...new Set(items.map((it) => it.category || 'その他'))];
+    const nOf = (c) => items.filter((it) => (it.category || 'その他') === c).length;
+    const rows = cats.map((c, ci) => `<div class="grp-h inv-cat cnt-cat" id="cnt-cat-${ci}">${esc(c)}<span>${nOf(c)}品</span><span class="cnt-done" data-cntcat="${esc(c)}"></span></div>` +
+      items.filter((it) => (it.category || 'その他') === c).map((it) => {
+        const last = (it.lastCount || {})[s];
+        return `<div class="inv-cnt" data-cat="${esc(c)}">
         <div><b>${esc(it.name)}</b><div class="hint">${it.location ? esc(it.location) + '・' : ''}前回 ${last ? dayLabel(last) : '—'}</div></div>
         <div class="cur">今 ${fmtQ(stock(it, s), it.unit)}</div>
         <input type="number" inputmode="decimal" min="0" step="0.5" data-cnt="${it.id}" data-before="${stock(it, s)}" placeholder="数えた数">
         <span class="diff" id="diff-${it.id}"></span>
       </div>`;
-    }).join('');
+      }).join('')).join('');
+    const jump = cats.length > 1 ? `<div class="cnt-jump">${cats.map((c, ci) => `<button type="button" class="chip-sel" data-act="invcntjump" data-v="${ci}">${esc(c)}</button>`).join('')}</div>` : '';
     return `<div class="card">
       <div class="card-h" style="flex-wrap:wrap">
         ${stores.length > 1 ? `<div class="chips">${stores.map((x) => `<button class="chip-sel ${x === s ? 'on' : ''}" data-act="invcntstore" data-v="${x}">${x}</button>`).join('')}</div>` : `<span class="dot" style="background:${STORE_VAR[s]}"></span><h3>${s}</h3>`}
         <span class="spacer"></span>
         <label class="hint" for="cnt-date">日付</label><input id="cnt-date" type="date" class="btn sm" value="${todayStr()}">
       </div>
-      <div class="card-b"><p class="hint" style="margin:0 0 6px">数えた数だけ入れてください（空欄の商品はそのまま）。保存すると在庫がその数に置き換わり、差が「棚卸し」として記録されます。月末に行うと、その月に使った量・ロスがわかります。</p></div>
+      <div class="card-b"><p class="hint" style="margin:0 0 6px">数えた数だけ入れてください（空欄の商品はそのまま）。保存すると在庫がその数に置き換わり、差が「棚卸し」として記録されます。月末に行うと、その月に使った量・ロスがわかります。</p>${jump}</div>
       ${rows}
       <div class="sh-f" style="position:static"><button class="btn primary" data-act="invcountsave">${s}の棚卸しを保存</button></div>
     </div>`;
@@ -676,6 +682,7 @@
       case 'invbuysave': saveBuy(b.dataset.id); break;
       case 'invcntstore': inv.countStore = b.dataset.v; P.render(); break;
       case 'invcountsave': saveCount(); break;
+      case 'invcntjump': { const h = $('#cnt-cat-' + b.dataset.v); if (h) h.scrollIntoView({ behavior: 'smooth', block: 'start' }); break; }
       case 'invrcpt': pickReceipt(); break;
       case 'invrcptstore': if (rcpt) rcpt.store = b.dataset.v; b.parentElement.querySelectorAll('.chip-sel').forEach((x) => x.classList.toggle('on', x === b)); break;
       case 'invrcptsave': saveReceipt(); break;
@@ -700,6 +707,13 @@
     const t = e.target;
     if (t.id === 'inv-q') { inv.q = t.value; applySearch(); }
     if (t.dataset && t.dataset.cnt) {
+      const row = t.closest('.inv-cnt'), c = row && row.dataset.cat;
+      if (c != null) {
+        const ins = [...document.querySelectorAll('.inv-cnt')].filter((r) => r.dataset.cat === c).map((r) => r.querySelector('[data-cnt]'));
+        const done = ins.filter((x) => x.value !== '').length;
+        const el = [...document.querySelectorAll('[data-cntcat]')].find((x) => x.dataset.cntcat === c);
+        if (el) el.textContent = done ? `入力済み ${done}/${ins.length}` : '';
+      }
       const d = $('#diff-' + t.dataset.cnt); if (!d) return;
       if (t.value === '') { d.textContent = ''; d.className = 'diff'; return; }
       const v = n2(Number(t.value) - Number(t.dataset.before));
