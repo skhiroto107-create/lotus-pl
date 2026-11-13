@@ -349,7 +349,7 @@ table.tbl{width:100%;border-collapse:collapse;font-size:13px;min-width:720px}
 .inv-st b small{font-size:11px;color:var(--ink-3);margin-left:2px}
 .inv-st i{width:7px;height:7px;border-radius:50%;display:inline-block;margin-bottom:2px}
 .inv-st span{font-size:10.5px;color:var(--ink-3)}
-.inv-st.low b{color:var(--bad)}
+.inv-st.low{background:var(--bad-bg);border-radius:8px;padding:2px 8px;margin:-2px -8px}
 .inv-acts{display:flex;gap:8px;align-items:center}
 .inv-log{display:grid;grid-template-columns:42px auto auto minmax(0,1fr) auto auto auto 28px;gap:10px;align-items:center;padding:10px 16px;border-bottom:1px solid var(--line-2);font-size:13px}
 .inv-log .d{color:var(--ink-3);font-variant-numeric:tabular-nums}
