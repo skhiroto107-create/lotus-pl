@@ -349,7 +349,7 @@ table.tbl{width:100%;border-collapse:collapse;font-size:13px;min-width:720px}
 .inv-st b small{font-size:11px;color:var(--ink-3);margin-left:2px}
 .inv-st i{width:7px;height:7px;border-radius:50%;display:inline-block;margin-bottom:2px}
 .inv-st span{font-size:10.5px;color:var(--ink-3)}
-.inv-st.low{background:var(--bad-bg);border-radius:8px;padding:2px 8px;margin:-2px -8px}
+.inv-st.low{}
 .inv-acts{display:flex;gap:8px;align-items:center}
 .inv-log{display:grid;grid-template-columns:42px auto auto minmax(0,1fr) auto auto auto 28px;gap:10px;align-items:center;padding:10px 16px;border-bottom:1px solid var(--line-2);font-size:13px}
 .inv-log .d{color:var(--ink-3);font-variant-numeric:tabular-nums}
@@ -450,7 +450,7 @@ table.tbl{width:100%;border-collapse:collapse;font-size:13px;min-width:720px}
 .ord-head .dot{width:7px;height:7px;border-radius:50%;display:inline-block}
 .ord-row{border-bottom:1px solid var(--line-2)}
 .ord-nm b{font-size:14px}
-.ord-q{display:flex;flex-direction:column;align-items:center;justify-content:center;border:0;border-radius:10px;padding:5px 2px;background:var(--bad-bg);color:var(--bad);line-height:1.1;min-height:46px;font:inherit;cursor:pointer}
+.ord-q{display:flex;flex-direction:column;align-items:center;justify-content:center;border:0;border-radius:10px;padding:5px 2px;background:var(--surface-3);color:var(--ink);line-height:1.1;min-height:46px;font:inherit;cursor:pointer}
 .ord-q b{font-size:20px;font-variant-numeric:tabular-nums}
 .ord-q small{font-size:10px;font-weight:700}
 .ord-q em{font-style:normal;font-size:9.5px;color:var(--ink-3);margin-top:1px}
