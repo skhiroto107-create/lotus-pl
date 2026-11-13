@@ -171,7 +171,10 @@
     const isLow = stores.some((s) => low(it, s));
     const st = stores.map((s) => {
       const m = minOf(it, s);
-      return `<div class="inv-st ${low(it, s) ? 'low' : ''}">${stores.length > 1 ? `<i style="background:${STORE_VAR[s]}"></i>` : ''}<b>${fmtQ(stock(it, s), it.unit)}</b>${mustOf(it, s) != null || m ? `<span>${mustOf(it, s) != null ? `最大 ${mustOf(it, s)}` : ''}${mustOf(it, s) != null && m ? '・' : ''}${m ? `ライン ${n2(m)}` : ''}</span>` : ''}</div>`;
+      // 仕入れが必要な店舗には「仕入れ必要数」（最大在庫数 − 今の在庫）を出す。ケースで買う商品はケース数も
+      const nd = low(it, s) ? needOf(it, s) : 0, pk = nd ? packOf(it, c) : 1;
+      const need = nd ? `<em class="inv-need">仕入れ必要数 ${nd}${esc(it.unit || '')}${pk > 1 ? `（${Math.ceil(nd / pk)}ケース）` : ''}</em>` : '';
+      return `<div class="inv-st ${low(it, s) ? 'low' : ''}">${stores.length > 1 ? `<i style="background:${STORE_VAR[s]}"></i>` : ''}<b>${fmtQ(stock(it, s), it.unit)}</b>${mustOf(it, s) != null || m ? `<span>${mustOf(it, s) != null ? `最大 ${mustOf(it, s)}` : ''}${mustOf(it, s) != null && m ? '・' : ''}${m ? `ライン ${n2(m)}` : ''}</span>` : ''}${need}</div>`;
     }).join('');
     const mv = inv.reorder ? `<div class="inv-mv"><span class="inv-handle" data-id="${it.id}" aria-label="ドラッグで移動">≡</span><button class="icon-btn" data-act="invmove" data-id="${it.id}" data-d="-1" aria-label="上へ">↑</button><button class="icon-btn" data-act="invmove" data-id="${it.id}" data-d="1" aria-label="下へ">↓</button></div>` : '';
     return `<div class="inv-row ${inv.reorder ? 'mv' : ''}" data-id="${it.id}" data-s="${esc((it.name + ' ' + (it.location || '') + ' ' + (it.memo || '')).toLowerCase())}">
